@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rbl:kb xmlns:rbl="http://rbl.io/schema/RBLang">
+
+<!-- ================================================================== -->
+<!-- CERTAINTY MECHANICS LAB (supplier onboarding risk screen).         -->
+<!-- Rainbird-owned teaching example.                                   -->
+<!--                                                                    -->
+<!-- A compact graph where every rule family demonstrates one certainty -->
+<!-- mechanism, with the expected certainty arithmetic worked in        -->
+<!-- comments. The engine computes an inferred fact certainty as:       -->
+<!--   rule cf x SUM(weight_i x condition_cf_i / 100) / SUM(weight_i)   -->
+<!-- over ALL conditions. Expression conditions count as weight-100     -->
+<!-- conditions at certainty 100; a condition binding an inferred fact  -->
+<!-- contributes weight x that fact certainty / 100; unmet optional     -->
+<!-- conditions contribute 0. Multiple rules asserting the same fact    -->
+<!-- combine by MAX of their certainties, not probabilistic OR.         -->
+<!--                                                                    -->
+<!-- Demonstrated here:                                                 -->
+<!--   1. graded per-indicator cf rules combined by MAX                 -->
+<!--   2. the weight-1 gate pattern so output cf tracks the carrier     -->
+<!--   3. low-weight optional corroboration                             -->
+<!--   4. certainty-neutral weight-0 optional binding                   -->
+<!--   5. paired weight-0 optional join for latest-revision resolution  -->
+<!--   6. optional-chain propagation                                    -->
+<!--   7. minimum-rule-certainty (observed in production RBLang)        -->
+<!--   8. rule-level behaviour top-down-strict (observed in production) -->
+<!--   9. hard-stop rule placed first so its question is asked first    -->
+<!-- ================================================================== -->
+
+  <!-- ============================ concepts ========================== -->
+  <concept name="Supplier" type="string"/>
+  <concept name="Risk Indicator" type="string"/>
+  <concept name="Risk Level" type="string"/>
+  <concept name="Recommended Action" type="string"/>
+  <concept name="Trading Years" type="number"/>
+  <concept name="Corroboration Flag" type="truth"/>
+  <concept name="Established Flag" type="truth"/>
+  <concept name="Value Entry" type="string"/>
+  <concept name="Revision Number" type="number"/>
+  <concept name="Entry Text" type="string"/>
+  <concept name="Region" type="string"/>
+  <concept name="Override Marker" type="string"/>
+  <concept name="Category" type="string"/>
+  <concept name="Name Text" type="string"/>
+  <concept name="Alert Flag" type="truth"/>
+
+  <!-- ======================= relationships ========================== -->
+  <!-- Askable inputs a human could genuinely answer; everything        -->
+  <!-- derived or systems-of-record is askable none. Askables carry     -->
+  <!-- allowUnknown so API consumers can skip them.                     -->
+  <rel name="has risk indicator" subject="Supplier" object="Risk Indicator" plural="true" askable="secondFormObject" allowUnknown="true" canAdd="all">
+    <secondFormObject>Which risk indicators have been raised against %S?</secondFormObject>
+  </rel>
+  <rel name="years trading" subject="Supplier" object="Trading Years" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>How many full years has %S been trading?</secondFormObject>
+  </rel>
+  <rel name="has audited accounts" subject="Supplier" object="Corroboration Flag" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Does %S file audited accounts?</secondFormObject>
+  </rel>
+  <rel name="has trade references" subject="Supplier" object="Corroboration Flag" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Has %S provided trade references?</secondFormObject>
+  </rel>
+  <rel name="has insurance cover" subject="Supplier" object="Corroboration Flag" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Does %S hold current insurance cover?</secondFormObject>
+  </rel>
+
+  <rel name="has risk level" subject="Supplier" object="Risk Level" askable="none"/>
+  <rel name="recommended action" subject="Supplier" object="Recommended Action" askable="none"/>
+  <rel name="is established supplier" subject="Supplier" object="Established Flag" askable="none"/>
+
+  <!-- Revisioned submissions: systems-of-record data, injected only.   -->
+  <rel name="has value entry" subject="Supplier" object="Value Entry" plural="true" askable="none"/>
+  <rel name="entry revision" subject="Value Entry" object="Revision Number" askable="none"/>
+  <rel name="latest revision" subject="Supplier" object="Revision Number" askable="none"/>
+  <rel name="entry text" subject="Value Entry" object="Entry Text" askable="none"/>
+  <rel name="declared address" subject="Supplier" object="Entry Text" askable="none"/>
+
+  <!-- Region resolution with override markers.                         -->
+  <rel name="contains marker type" subject="Supplier" object="Override Marker" plural="true" askable="none"/>
+  <rel name="base region" subject="Supplier" object="Region" askable="none"/>
+  <rel name="has effective region" subject="Supplier" object="Region" askable="none"/>
+
+  <!-- Fuzzy name comparison over low-confidence extracted data.        -->
+  <rel name="registered name" subject="Supplier" object="Name Text" askable="none"/>
+  <rel name="extracted trading name" subject="Supplier" object="Name Text" askable="none"/>
+  <rel name="name mismatch alert" subject="Supplier" object="Alert Flag" askable="none"/>
+
+  <!-- Portfolio concentration.                                         -->
+  <rel name="in category" subject="Supplier" object="Category" askable="none"/>
+  <rel name="category concentration alert" subject="Supplier" object="Alert Flag" askable="none"/>
+
+  <!-- ====================== concept instances ======================= -->
+  <concinst name="Sanctions List Match" type="Risk Indicator"/>
+  <concinst name="Adverse Media" type="Risk Indicator"/>
+  <concinst name="Late Statutory Filings" type="Risk Indicator"/>
+  <concinst name="Newly Incorporated" type="Risk Indicator"/>
+  <concinst name="Standard" type="Risk Level"/>
+  <concinst name="Elevated" type="Risk Level"/>
+  <concinst name="Severe" type="Risk Level"/>
+  <concinst name="Approve" type="Recommended Action"/>
+  <concinst name="Review" type="Recommended Action"/>
+  <concinst name="Decline" type="Recommended Action"/>
+  <concinst name="Branch Override" type="Override Marker"/>
+  <concinst name="Agent Override" type="Override Marker"/>
+  <concinst name="Domestic" type="Region"/>
+  <concinst name="Overseas" type="Region"/>
+
+  <!-- ============ 9. hard-stop rule ordered first ================== -->
+  <!-- Interactive question order follows rule order then condition    -->
+  <!-- order for the queried relationship. Placing the hard-stop rule  -->
+  <!-- FIRST makes its question the first asked, so an interactive     -->
+  <!-- session can decline in one question.                            -->
+  <relinst type="recommended action" object="Decline" cf="100" name="CF9 Sanctions match declines immediately">
+    <condition rel="has risk indicator" subject="%S" object="Sanctions List Match"/>
+  </relinst>
+
+  <!-- ============ 1. graded per-indicator cf rules ================= -->
+  <!-- One rule per indicator, each with its own certainty. Multiple   -->
+  <!-- firing rules combine by MAX: a supplier with Adverse Media and  -->
+  <!-- Late Statutory Filings holds Elevated at 85, not a blend.       -->
+  <!-- Graded singles beat one weighted-optionals rule when a single   -->
+  <!-- strong indicator must stay actionable on its own.               -->
+  <relinst type="has risk level" object="Severe" cf="95" name="CF1 Sanctions match alone is severe">
+    <condition rel="has risk indicator" subject="%S" object="Sanctions List Match"/>
+  </relinst>
+  <relinst type="has risk level" object="Elevated" cf="85" name="CF1 Adverse media elevates risk">
+    <condition rel="has risk indicator" subject="%S" object="Adverse Media"/>
+  </relinst>
+  <relinst type="has risk level" object="Elevated" cf="75" name="CF1 Late filings elevate risk">
+    <condition rel="has risk indicator" subject="%S" object="Late Statutory Filings"/>
+  </relinst>
+  <relinst type="has risk level" object="Elevated" cf="65" name="CF1 New incorporation elevates risk">
+    <condition rel="has risk indicator" subject="%S" object="Newly Incorporated"/>
+  </relinst>
+  <!-- Default level when no graded indicator fires. The zero-count    -->
+  <!-- guards make the default explicit rather than an absence.        -->
+  <relinst type="has risk level" object="Standard" cf="100" name="CF1 No recognised indicator leaves standard risk">
+    <condition expression="countRelationshipInstances(%S,'has risk indicator',*) is equal to 0" alt="No risk indicator has been raised"/>
+  </relinst>
+
+  <!-- ============ 2. the weight-1 gate pattern ===================== -->
+  <!-- The carrier condition (binding the inferred risk level, which   -->
+  <!-- carries its own certainty) keeps the default weight 100; the    -->
+  <!-- count-gate carries weight 1 so it barely dilutes the carrier.   -->
+  <!-- Worked example, Adverse Media only: carrier certainty 85, gate  -->
+  <!-- met at 100. Output = 95 x (100 x 0.85 + 1 x 1.00) / 101         -->
+  <!-- = 95 x 86 / 101 = approximately 81. Without the weight-1 gate   -->
+  <!-- the same rule would output 95 x (85 + 100) / 200 = 88, letting  -->
+  <!-- the gate INFLATE a low-confidence carrier.                      -->
+  <relinst type="recommended action" object="Review" cf="95" name="CF2 Elevated risk without sanctions goes to review">
+    <condition rel="has risk level" subject="%S" object="Elevated"/>
+    <condition expression="countRelationshipInstances(%S,'has risk indicator','Sanctions List Match') is equal to 0" weight="1" alt="No sanctions match is present"/>
+  </relinst>
+  <relinst type="recommended action" object="Approve" cf="100" name="CF2 Standard risk is approved">
+    <condition rel="has risk level" subject="%S" object="Standard"/>
+  </relinst>
+
+  <!-- ============ 3. low-weight optional corroboration ============= -->
+  <!-- One mandatory anchor plus three optional corroborators at low   -->
+  <!-- weights. Thin data still answers, at slightly reduced cf.       -->
+  <!-- The tenure-check EXPRESSION would count as a weight-100         -->
+  <!-- condition by default (expressions default to weight 100 at      -->
+  <!-- certainty 100), so it carries weight 0 here: it must still      -->
+  <!-- pass, but only the anchor binding and the corroborators enter   -->
+  <!-- the certainty average. Worked examples (rule cf 95, denominator -->
+  <!-- 100 + 0 + 20 + 15 + 10 = 145):                                  -->
+  <!--   all four met: (100 + 20 + 15 + 10) / 145 x 95 = 95            -->
+  <!--   anchor only:  100 / 145 x 95 = 66                             -->
+  <!--   anchor plus audited accounts: 120 / 145 x 95 = 79             -->
+  <relinst type="is established supplier" object="true" cf="95" name="CF3 Established supplier by tenure with corroboration">
+    <condition rel="years trading" subject="%S" object="%Y"/>
+    <condition expression="%Y is greater than or equal to 5" weight="0" alt="The supplier has traded for at least five full years"/>
+    <condition rel="has audited accounts" subject="%S" object="true" behaviour="optional" weight="20"/>
+    <condition rel="has trade references" subject="%S" object="true" behaviour="optional" weight="15"/>
+    <condition rel="has insurance cover" subject="%S" object="true" behaviour="optional" weight="10"/>
+  </relinst>
+  <relinst type="is established supplier" object="false" cf="100" name="CF3 Short tenure is not established">
+    <condition rel="years trading" subject="%S" object="%Y"/>
+    <condition expression="%Y is less than 5" alt="The supplier has traded for under five full years"/>
+  </relinst>
+
+  <!-- ==== 5. paired weight-0 optional join, latest revision ======== -->
+  <!-- Two consecutive optional weight-0 conditions share %REV: when   -->
+  <!-- revision data exists the shared variable joins the entry to the -->
+  <!-- supplier's latest revision, filtering the binding; when no      -->
+  <!-- revisions exist both conditions skip and any entry binds. The   -->
+  <!-- certainty is untouched in both cases because the weights are 0. -->
+  <relinst type="declared address" cf="100" name="CF5 Address from the latest revision when revisions exist">
+    <condition rel="has value entry" subject="%S" object="%ENTRY"/>
+    <condition rel="entry revision" subject="%ENTRY" object="%REV" behaviour="optional" weight="0"/>
+    <condition rel="latest revision" subject="%S" object="%REV" behaviour="optional" weight="0"/>
+    <condition rel="entry text" subject="%ENTRY" object="%O"/>
+  </relinst>
+
+  <!-- ============ 4 and 6. weight-0 binding and chain =============== -->
+  <!-- The mandatory zero-count guard establishes the main             -->
+  <!-- precondition. The optional weight-0 binder and the optional     -->
+  <!-- weight-0 constraint that CONSUMES its variable form one         -->
+  <!-- skippable unit: if the binder finds nothing the constraint must -->
+  <!-- not be mandatory or it would kill the rule. Neither touches     -->
+  <!-- the output certainty.                                           -->
+  <relinst type="has effective region" cf="100" name="CF6 Base region stands when no branch override applies">
+    <condition expression="countRelationshipInstances(%S,'contains marker type','Branch Override') is equal to 0" alt="No branch override marker is present"/>
+    <condition rel="contains marker type" subject="%S" object="%MARKER" behaviour="optional" weight="0"/>
+    <condition expression="%MARKER is equal to 'Agent Override'" behaviour="optional" weight="0" alt="Any marker present is only an agent override"/>
+    <condition rel="base region" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="has effective region" object="Overseas" cf="100" name="CF6 Branch override forces the overseas region">
+    <condition expression="countRelationshipInstances(%S,'contains marker type','Branch Override') is greater than or equal to 1" alt="A branch override marker is present"/>
+  </relinst>
+
+  <!-- ============ 7. minimum-rule-certainty ======================== -->
+  <!-- Extracted names arrive at LOW certainty (for example injected   -->
+  <!-- at cf 40 from OCR output). By default the engine suppresses     -->
+  <!-- conclusions whose combined condition certainty falls below the  -->
+  <!-- firing threshold; minimum-rule-certainty=1 lets this rule fire  -->
+  <!-- on any nonzero-confidence evidence so a possible mismatch is    -->
+  <!-- raised rather than silently dropped. Observed in production     -->
+  <!-- RBLang; semantics inferred, not yet probed live.                -->
+  <!-- CAVEAT on the dynamic regex below: %REG is interpolated raw, so -->
+  <!-- this pattern assumes registered names free of regex             -->
+  <!-- metacharacters. A name containing a slash or unbalanced         -->
+  <!-- bracket builds an invalid pattern; regexCount then returns a    -->
+  <!-- NEGATIVE error code, the equals-zero test fails, and the rule   -->
+  <!-- silently does not fire (a literal plus must be written [+]).    -->
+  <!-- Sanitise names upstream, or fall back to exact inequality       -->
+  <!-- (%EXT is not equal to %REG) where input cannot be trusted.      -->
+  <relinst type="name mismatch alert" object="true" cf="100" minimum-rule-certainty="1" name="CF7 Extracted name conflicts with the registered name">
+    <condition rel="registered name" subject="%S" object="%REG"/>
+    <condition rel="extracted trading name" subject="%S" object="%EXT"/>
+    <condition expression="'/' + %REG + '/i'" value="%REG_CI"/>
+    <condition expression="regexCount(%EXT,%REG_CI) is equal to 0" alt="Ignoring case, the registered name does not appear in the extracted trading name"/>
+  </relinst>
+
+  <!-- ============ 8. rule-level behaviour top-down-strict ========== -->
+  <!-- Forces strict written-order evaluation instead of letting the   -->
+  <!-- engine reorder or opportunistically resolve conditions; used    -->
+  <!-- where a global count is only meaningful after the join          -->
+  <!-- conditions have fully resolved. Observed in production RBLang;  -->
+  <!-- semantics inferred, not yet probed live.                        -->
+  <relinst type="category concentration alert" object="true" cf="100" behaviour="top-down-strict" name="CF8 Category concentration raises an alert">
+    <condition rel="in category" subject="%S" object="%CAT"/>
+    <condition rel="in category" subject="%S2" object="%CAT"/>
+    <condition expression="%S2 is not equal to %S" alt="Another supplier shares the category"/>
+    <condition expression="countRelationshipInstances(*,'in category',%CAT) is greater than or equal to 3" alt="At least three suppliers sit in the shared category"/>
+  </relinst>
+
+</rbl:kb>

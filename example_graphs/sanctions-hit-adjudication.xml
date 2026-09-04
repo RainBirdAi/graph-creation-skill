@@ -1,0 +1,1975 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rbl:kb xmlns:rbl="http://rbl.io/schema/RBLang">
+
+  <!-- ================================================================ -->
+  <!-- Sanctions Screening Hit Adjudication - UK OFSI, OFAC, EU, UN     -->
+  <!-- Generic demo and reusable blueprint. Every person, entity,       -->
+  <!-- vessel and jurisdiction of designation is fictional.             -->
+  <!-- Decides per screening hit: Close as False Positive, True Match   -->
+  <!-- Freeze and Report, True Match Reject and Report, True Match      -->
+  <!-- Process Under Licence, or Refer to MLRO - with certainty, full   -->
+  <!-- evidential rationale, reporting obligations per bound regime,    -->
+  <!-- next steps and review routing.                                   -->
+  <!-- Layers: match feature derivation, identifier corroboration,      -->
+  <!-- identity grade ladder, bounded-level ownership and control       -->
+  <!-- resolution per regime family, regime nexus, payment integrity,   -->
+  <!-- licence applicability, discount hard blocks, candidate outcomes  -->
+  <!-- and a precedence ladder guaranteeing exactly one final outcome.  -->
+  <!-- Regulatory grounding encoded from: SAMLA 2018 s.21, Russia       -->
+  <!-- Sanctions Regs 2019 regs 7, 11, 12, 17A, 58, 70 and Schedule 1,  -->
+  <!-- OFAC 50 Percent Rule FAQs 398, 401, 402, 403 and FAQ 5 and FAQ   -->
+  <!-- 124, 31 CFR 501.603 and 501.604, EU Reg 269/2014 Arts 2, 7, 8    -->
+  <!-- and 17 with Best Practices ST 11623/24, UN consolidated list     -->
+  <!-- with FATF R.6 freeze without delay, Wolfsberg Sanctions          -->
+  <!-- Screening 2019 and Payment Transparency Standards 2023,          -->
+  <!-- FATF R.16. Ownership tests are parameterised per family:         -->
+  <!-- UK strictly GT 50 single holder without aggregation but with     -->
+  <!-- Schedule 1 joint arrangements, OFAC and EU aggregate GTE 50      -->
+  <!-- with threshold gated cascade. Operational thresholds live as     -->
+  <!-- facts on the Screening Policy instance.                          -->
+  <!-- ================================================================ -->
+
+  <!-- ============================ Concepts ========================== -->
+
+  <concept name="Hit" type="string"/>
+  <concept name="Party" type="string"/>
+  <concept name="Listing" type="string"/>
+  <concept name="Sanctions List" type="string"/>
+  <concept name="Holding" type="string"/>
+  <concept name="Licence" type="string"/>
+  <concept name="Payment" type="string"/>
+  <concept name="Policy" type="string"/>
+  <concept name="Match Type" type="string"/>
+  <concept name="Name Quality" type="string"/>
+  <concept name="Hit Archetype" type="string"/>
+  <concept name="Party Type" type="string"/>
+  <concept name="Party Role" type="string"/>
+  <concept name="Identity Grade" type="string"/>
+  <concept name="Comparison Grade" type="string"/>
+  <concept name="Corroborator Factor" type="string"/>
+  <concept name="Differentiator Factor" type="string"/>
+  <concept name="Ownership Status" type="string"/>
+  <concept name="Caught Mark" type="string"/>
+  <concept name="Caution Mark" type="string"/>
+  <concept name="Regime Family" type="string"/>
+  <concept name="Licence Ground" type="string"/>
+  <concept name="Payment Purpose" type="string"/>
+  <concept name="Currency" type="string"/>
+  <concept name="Country" type="string"/>
+  <concept name="Integrity Indicator" type="string"/>
+  <concept name="Discount Block Reason" type="string"/>
+  <concept name="Control Indicator Type" type="string"/>
+  <concept name="Match Status" type="string"/>
+  <concept name="Gender" type="string"/>
+  <concept name="Outcome" type="string"/>
+  <concept name="Evidence" type="string"/>
+  <concept name="Rationale" type="string"/>
+  <concept name="Next Step" type="string"/>
+  <concept name="Review Requirement" type="string"/>
+  <concept name="Reporting Obligation" type="string"/>
+  <concept name="Score" type="number"/>
+  <concept name="Percent" type="number"/>
+  <concept name="Amount" type="number"/>
+  <concept name="Count" type="number"/>
+  <concept name="Gap Years" type="number"/>
+  <concept name="Event Date" type="date"/>
+  <concept name="Flag" type="truth"/>
+
+  <!-- ======================= Relationships ========================== -->
+
+  <!-- Hit link layer: injected by the screening engine, never asked -->
+  <rel name="matches listing" subject="Hit" object="Listing" askable="none" canAdd="all"/>
+  <rel name="concerns party" subject="Hit" object="Party" askable="none" canAdd="all"/>
+  <rel name="relates to payment" subject="Hit" object="Payment" askable="none" canAdd="all"/>
+  <rel name="has booking entity" subject="Hit" object="Party" askable="none" canAdd="all"/>
+  <rel name="has hit archetype" subject="Hit" object="Hit Archetype" askable="none"/>
+  <rel name="has match score" subject="Hit" object="Score" askable="none"/>
+  <rel name="has match type" subject="Hit" object="Match Type" askable="none"/>
+  <rel name="has matched name quality" subject="Hit" object="Name Quality" askable="none"/>
+  <rel name="is full name exact" subject="Hit" object="Flag" askable="none"/>
+  <rel name="has eponymous name indicator" subject="Hit" object="Flag" askable="none"/>
+  <rel name="listing changed since last adjudication" subject="Hit" object="Flag" askable="none"/>
+
+  <!-- Listing data: from the list datasource, never asked -->
+  <rel name="is on sanctions list" subject="Listing" object="Sanctions List" plural="true" askable="none" canAdd="all"/>
+  <rel name="has listing entry type" subject="Listing" object="Party Type" askable="none"/>
+  <rel name="listing has dob entry" subject="Listing" object="Event Date" plural="true" askable="none"/>
+  <rel name="listing has nationality" subject="Listing" object="Country" plural="true" askable="none" canAdd="all"/>
+  <rel name="listing has address country" subject="Listing" object="Country" askable="none" canAdd="all"/>
+  <rel name="listing has gender" subject="Listing" object="Gender" askable="none"/>
+  <rel name="listing marked deceased" subject="Listing" object="Flag" askable="none"/>
+  <rel name="is specified ship entry" subject="Listing" object="Flag" askable="none"/>
+  <rel name="was removed from eu list" subject="Listing" object="Flag" askable="none"/>
+  <rel name="has ssi prohibited purpose" subject="Listing" object="Payment Purpose" plural="true" askable="none" canAdd="all"/>
+  <rel name="eu transposition pending" subject="Listing" object="Flag" askable="none"/>
+
+  <!-- Party reference data: designation status of RESOLVED reference parties only, ownership registry data, institution profile -->
+  <rel name="is listed on" subject="Party" object="Sanctions List" plural="true" askable="none" canAdd="all"/>
+  <rel name="party has nationality" subject="Party" object="Country" plural="true" askable="none" canAdd="all"/>
+  <rel name="party has gender" subject="Party" object="Gender" askable="none"/>
+  <rel name="is uk incorporated" subject="Party" object="Flag" askable="none"/>
+  <rel name="is eu incorporated" subject="Party" object="Flag" askable="none"/>
+  <rel name="is designated for reg 17a purposes" subject="Party" object="Flag" askable="none"/>
+  <rel name="has beneficiary bank" subject="Payment" object="Party" askable="none" canAdd="all"/>
+
+  <!-- Analyst askable party facts: singular, allowUnknown, everything else injected -->
+  <rel name="has party type" subject="Party" object="Party Type" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Is %S an Individual, Entity, Vessel or Aircraft?</secondFormObject>
+  </rel>
+  <rel name="has party dob" subject="Party" object="Event Date" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>What is the verified date of birth of %S?</secondFormObject>
+  </rel>
+  <rel name="party nationality set complete" subject="Party" object="Flag" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Is the recorded nationality set for %S complete and verified?</secondFormObject>
+  </rel>
+  <rel name="has additional nationality" subject="Party" object="Country" askable="secondFormObject" allowUnknown="true" canAdd="all">
+    <secondFormObject>Does %S hold any additional nationality beyond those recorded?</secondFormObject>
+  </rel>
+  <rel name="has residence country" subject="Party" object="Country" askable="secondFormObject" allowUnknown="true" canAdd="all">
+    <secondFormObject>What is the verified country of residence of %S?</secondFormObject>
+  </rel>
+  <rel name="has passport match status" subject="Hit" object="Match Status" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Comparing the passport or national ID number on file for the party against the listing for hit %S, is it a Confirmed Match, Verified Mismatch or Not Comparable?</secondFormObject>
+  </rel>
+  <rel name="has registration number match status" subject="Hit" object="Match Status" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Comparing the company registration number on file against the listing for hit %S, is it a Confirmed Match, Verified Mismatch or Not Comparable?</secondFormObject>
+  </rel>
+  <rel name="has registry imo verification status" subject="Hit" object="Match Status" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Comparing the registry verified IMO number of the vessel against the listing for hit %S, is it a Confirmed Match, Verified Mismatch, Unverifiable or Not Comparable?</secondFormObject>
+  </rel>
+  <rel name="has customer relationship role" subject="Hit" object="Party Role" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>What is the role of the screened party in hit %S - Account Holder, Payment Beneficiary, Payment Originator, Ultimate Beneficiary or Counterparty Bank?</secondFormObject>
+  </rel>
+  <rel name="has documented payment purpose" subject="Hit" object="Payment Purpose" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>What is the documented purpose of the payment in hit %S?</secondFormObject>
+  </rel>
+  <rel name="has ofsi licence on file" subject="Hit" object="Licence" askable="secondFormObject" allowUnknown="true" canAdd="all">
+    <secondFormObject>Is there an OFSI licence on file covering the activity in hit %S, and if so which?</secondFormObject>
+  </rel>
+  <rel name="has ofac licence on file" subject="Hit" object="Licence" askable="secondFormObject" allowUnknown="true" canAdd="all">
+    <secondFormObject>Is there an OFAC general or specific license on file covering the activity in hit %S, and if so which?</secondFormObject>
+  </rel>
+  <rel name="has ownership data completeness" subject="Hit" object="Match Status" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Is the ownership registry data for the screened entity in hit %S Complete, Incomplete or Not Applicable?</secondFormObject>
+  </rel>
+  <rel name="minority designated owner is transaction party" subject="Hit" object="Match Status" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Is any designated minority owner itself a party to, signatory of, or beneficiary of the transaction in hit %S - Confirmed Match meaning yes, Verified Mismatch meaning no, or Not Comparable if unknown?</secondFormObject>
+  </rel>
+
+  <!-- Payment data: injected by the payment gateway, never asked -->
+  <rel name="has payment currency" subject="Payment" object="Currency" askable="none"/>
+  <rel name="has payment amount" subject="Payment" object="Amount" askable="none"/>
+  <rel name="has payment date" subject="Payment" object="Event Date" askable="none"/>
+  <rel name="is outbound payment" subject="Payment" object="Flag" askable="none"/>
+  <rel name="is inbound credit to own frozen account" subject="Payment" object="Flag" askable="none"/>
+  <rel name="is inbound receipt of target funds" subject="Payment" object="Flag" askable="none"/>
+  <rel name="has us correspondent in chain" subject="Payment" object="Flag" askable="none"/>
+  <rel name="has eu nexus marker" subject="Payment" object="Flag" askable="none"/>
+  <rel name="has integrity indicator" subject="Hit" object="Integrity Indicator" plural="true" askable="none" canAdd="all"/>
+
+  <!-- Ownership registry data: injected by the corporate registry datasource, never asked -->
+  <rel name="is holding in" subject="Holding" object="Party" askable="none" canAdd="all"/>
+  <rel name="is held by" subject="Holding" object="Party" askable="none" canAdd="all"/>
+  <rel name="has holding percent" subject="Holding" object="Percent" askable="none"/>
+  <rel name="is under joint arrangement" subject="Holding" object="Flag" askable="none"/>
+  <rel name="has control indicator" subject="Holding" object="Control Indicator Type" plural="true" askable="none" canAdd="all"/>
+  <rel name="has ownership red flag" subject="Party" object="Control Indicator Type" plural="true" askable="none" canAdd="all"/>
+  <rel name="has registry evidence age months" subject="Party" object="Count" askable="none"/>
+  <rel name="has eu presumption rebuttal evidence" subject="Party" object="Flag" askable="none"/>
+
+  <!-- Licence record data: injected from the licence register, never asked -->
+  <rel name="has licence authority family" subject="Licence" object="Regime Family" askable="none"/>
+  <rel name="has licence ground" subject="Licence" object="Licence Ground" askable="none"/>
+  <rel name="has licence valid from" subject="Licence" object="Event Date" askable="none"/>
+  <rel name="has licence valid to" subject="Licence" object="Event Date" askable="none"/>
+  <rel name="has licence conditions met" subject="Licence" object="Flag" askable="none"/>
+  <rel name="has licence caps ok" subject="Licence" object="Flag" askable="none"/>
+  <rel name="ground covers purpose" subject="Licence Ground" object="Payment Purpose" plural="true" askable="none"/>
+
+  <!-- Reference data: jurisdictions and policy parameters -->
+  <rel name="is sanctioned jurisdiction" subject="Country" object="Flag" askable="none"/>
+  <rel name="is intermediary jurisdiction" subject="Country" object="Flag" askable="none"/>
+  <rel name="has strong match score threshold" subject="Policy" object="Score" askable="none"/>
+  <rel name="has alert score floor" subject="Policy" object="Score" askable="none"/>
+  <rel name="has dob tolerance years" subject="Policy" object="Gap Years" askable="none"/>
+  <rel name="has ownership caution floor percent" subject="Policy" object="Percent" askable="none"/>
+  <rel name="has aggregate blocking threshold percent" subject="Policy" object="Percent" askable="none"/>
+  <rel name="has uk majority threshold percent" subject="Policy" object="Percent" askable="none"/>
+  <rel name="weak alias discount allowed" subject="Policy" object="Flag" askable="none"/>
+  <rel name="year match counts as corroborator" subject="Policy" object="Flag" askable="none"/>
+  <rel name="applies ofac lists as policy" subject="Policy" object="Flag" askable="none"/>
+  <rel name="applies un interim freeze" subject="Policy" object="Flag" askable="none"/>
+  <rel name="has registry staleness limit months" subject="Policy" object="Count" askable="none"/>
+  <rel name="has four eyes score threshold" subject="Policy" object="Score" askable="none"/>
+
+  <!-- Derived match features and identifier comparisons, never asked -->
+  <rel name="has dob gap years item" subject="Hit" object="Gap Years" plural="true" askable="none"/>
+  <rel name="has minimum dob gap years" subject="Hit" object="Gap Years" askable="none"/>
+  <rel name="has dob comparison" subject="Hit" object="Comparison Grade" plural="true" askable="none"/>
+  <rel name="has name match strength" subject="Hit" object="Comparison Grade" askable="none"/>
+  <rel name="has partial corroborator" subject="Hit" object="Corroborator Factor" plural="true" askable="none"/>
+  <rel name="has decisive corroborator" subject="Hit" object="Corroborator Factor" plural="true" askable="none"/>
+  <rel name="has strong differentiator" subject="Hit" object="Differentiator Factor" plural="true" askable="none"/>
+  <rel name="has weak differentiator" subject="Hit" object="Differentiator Factor" plural="true" askable="none"/>
+  <rel name="has decisive differentiator" subject="Hit" object="Differentiator Factor" plural="true" askable="none"/>
+  <rel name="has identity grade candidate" subject="Hit" object="Identity Grade" plural="true" askable="none"/>
+  <rel name="has identity assessment" subject="Hit" object="Identity Grade" askable="none"/>
+
+  <!-- Derived ownership resolution: bounded level DAG per regime family, never asked -->
+  <rel name="has ofac blocked stake percent level 1" subject="Party" object="Percent" plural="true" askable="none"/>
+  <rel name="has ofac aggregate percent level 1" subject="Party" object="Percent" askable="none"/>
+  <rel name="has ofac caught mark level 1" subject="Party" object="Caught Mark" askable="none"/>
+  <rel name="has ofac blocked stake percent level 2" subject="Party" object="Percent" plural="true" askable="none"/>
+  <rel name="has ofac aggregate percent level 2" subject="Party" object="Percent" askable="none"/>
+  <rel name="has ofac ownership finding" subject="Party" object="Ownership Status" askable="none"/>
+  <rel name="has eu blocked stake percent level 1" subject="Party" object="Percent" plural="true" askable="none"/>
+  <rel name="has eu aggregate percent level 1" subject="Party" object="Percent" askable="none"/>
+  <rel name="has eu caught mark level 1" subject="Party" object="Caught Mark" askable="none"/>
+  <rel name="has eu blocked stake percent level 2" subject="Party" object="Percent" plural="true" askable="none"/>
+  <rel name="has eu aggregate percent level 2" subject="Party" object="Percent" askable="none"/>
+  <rel name="has eu ownership finding" subject="Party" object="Ownership Status" askable="none"/>
+  <rel name="has uk designated holder" subject="Party" object="Party" plural="true" askable="none"/>
+  <rel name="has uk designated holder stake percent" subject="Party" object="Percent" plural="true" askable="none"/>
+  <rel name="has uk designated aggregate percent" subject="Party" object="Percent" askable="none"/>
+  <rel name="has uk joint arrangement stake percent" subject="Party" object="Percent" plural="true" askable="none"/>
+  <rel name="has uk owned mark level 1" subject="Party" object="Caught Mark" askable="none"/>
+  <rel name="has uk caught mark level 1" subject="Party" object="Caught Mark" askable="none"/>
+  <rel name="has uk owned mark level 2" subject="Party" object="Caught Mark" askable="none"/>
+  <rel name="has uk ownership finding" subject="Party" object="Ownership Status" askable="none"/>
+  <rel name="has ownership caution mark" subject="Party" object="Caution Mark" plural="true" askable="none"/>
+  <rel name="has ownership clear status" subject="Hit" object="Ownership Status" askable="none"/>
+
+  <!-- Derived regime nexus, integrity, licence and control layers, never asked -->
+  <rel name="regime family binds hit" subject="Hit" object="Regime Family" plural="true" askable="none"/>
+  <rel name="has policy only ofac exposure" subject="Hit" object="Flag" askable="none"/>
+  <rel name="has un gap exposure" subject="Hit" object="Flag" askable="none"/>
+  <rel name="family licensed for hit" subject="Hit" object="Regime Family" plural="true" askable="none"/>
+  <rel name="has unlicensed bound blocking family" subject="Hit" object="Regime Family" plural="true" askable="none"/>
+  <rel name="has target designation basis" subject="Hit" object="Regime Family" plural="true" askable="none"/>
+  <rel name="has discount block" subject="Hit" object="Discount Block Reason" plural="true" askable="none"/>
+
+  <!-- Outcome layer, never asked -->
+  <rel name="has candidate outcome" subject="Hit" object="Outcome" plural="true" askable="none"/>
+  <rel name="has freeze candidate" subject="Hit" object="Flag" askable="none"/>
+  <rel name="has reject candidate" subject="Hit" object="Flag" askable="none"/>
+  <rel name="has licence candidate" subject="Hit" object="Flag" askable="none"/>
+  <rel name="has refer candidate" subject="Hit" object="Flag" askable="none"/>
+  <rel name="has adjudication outcome" subject="Hit" object="Outcome" askable="none"/>
+  <rel name="has contributing evidence" subject="Hit" object="Evidence" plural="true" askable="none"/>
+  <rel name="has adjudication rationale" subject="Hit" object="Rationale" askable="none"/>
+  <rel name="has recommended next step" subject="Hit" object="Next Step" askable="none"/>
+  <rel name="has reporting obligation" subject="Hit" object="Reporting Obligation" plural="true" askable="none"/>
+  <rel name="has review requirement" subject="Hit" object="Review Requirement" plural="true" askable="none"/>
+
+  <!-- ======================= Concept instances ======================= -->
+
+  <!-- Outcomes -->
+  <concinst name="Close as False Positive" type="Outcome"/>
+  <concinst name="True Match - Freeze and Report" type="Outcome"/>
+  <concinst name="True Match - Reject and Report" type="Outcome"/>
+  <concinst name="True Match - Process Under Licence" type="Outcome"/>
+  <concinst name="Refer to MLRO" type="Outcome"/>
+
+  <!-- Sanctions lists -->
+  <concinst name="UK Sanctions List" type="Sanctions List"/>
+  <concinst name="OFAC SDN List" type="Sanctions List"/>
+  <concinst name="OFAC SSI List" type="Sanctions List"/>
+  <concinst name="EU Financial Sanctions List" type="Sanctions List"/>
+  <concinst name="UN Consolidated List" type="Sanctions List"/>
+
+  <!-- Hit archetypes, party types and roles -->
+  <concinst name="Name Match" type="Hit Archetype"/>
+  <concinst name="Ownership Refresh" type="Hit Archetype"/>
+  <concinst name="Individual" type="Party Type"/>
+  <concinst name="Entity" type="Party Type"/>
+  <concinst name="Vessel" type="Party Type"/>
+  <concinst name="Aircraft" type="Party Type"/>
+  <concinst name="Account Holder" type="Party Role"/>
+  <concinst name="Payment Beneficiary" type="Party Role"/>
+  <concinst name="Payment Originator" type="Party Role"/>
+  <concinst name="Ultimate Beneficiary" type="Party Role"/>
+  <concinst name="Counterparty Bank" type="Party Role"/>
+
+  <!-- Match metadata vocabulary -->
+  <concinst name="Exact" type="Match Type"/>
+  <concinst name="Fuzzy" type="Match Type"/>
+  <concinst name="Phonetic" type="Match Type"/>
+  <concinst name="Token Reorder" type="Match Type"/>
+  <concinst name="Primary Name" type="Name Quality"/>
+  <concinst name="Strong Alias" type="Name Quality"/>
+  <concinst name="Weak Alias" type="Name Quality"/>
+
+  <!-- Identity grades: the precedence ladder selects exactly one -->
+  <concinst name="Confirmed Same" type="Identity Grade"/>
+  <concinst name="Probable Same" type="Identity Grade"/>
+  <concinst name="Weak Alias Only" type="Identity Grade"/>
+  <concinst name="Partially Corroborated" type="Identity Grade"/>
+  <concinst name="Indeterminate" type="Identity Grade"/>
+  <concinst name="Probable Different" type="Identity Grade"/>
+  <concinst name="Confirmed Different" type="Identity Grade"/>
+
+  <!-- Comparison grades -->
+  <concinst name="Exact Match" type="Comparison Grade"/>
+  <concinst name="Year Match" type="Comparison Grade"/>
+  <concinst name="Within Tolerance" type="Comparison Grade"/>
+  <concinst name="Beyond Tolerance" type="Comparison Grade"/>
+  <concinst name="Not Comparable Grade" type="Comparison Grade"/>
+  <concinst name="Strong" type="Comparison Grade"/>
+  <concinst name="Moderate" type="Comparison Grade"/>
+
+  <!-- Corroborator and differentiator factors: closed vocabularies so string dedup gives true distinct counts -->
+  <concinst name="DOB Exact Match" type="Corroborator Factor"/>
+  <concinst name="DOB Year Match" type="Corroborator Factor"/>
+  <concinst name="Nationality Overlap" type="Corroborator Factor"/>
+  <concinst name="Residence Country Match" type="Corroborator Factor"/>
+  <concinst name="Passport Number Match" type="Corroborator Factor"/>
+  <concinst name="Registration Number Match" type="Corroborator Factor"/>
+  <concinst name="IMO Number Match" type="Corroborator Factor"/>
+  <concinst name="DOB Beyond Tolerance" type="Differentiator Factor"/>
+  <concinst name="Nationality Difference All Listed" type="Differentiator Factor"/>
+  <concinst name="Residence Country Difference" type="Differentiator Factor"/>
+  <concinst name="Gender Mismatch" type="Differentiator Factor"/>
+  <concinst name="Entity Type Mismatch" type="Differentiator Factor"/>
+  <concinst name="Passport Number Verified Mismatch" type="Differentiator Factor"/>
+  <concinst name="Registration Number Verified Mismatch" type="Differentiator Factor"/>
+  <concinst name="IMO Number Verified Mismatch" type="Differentiator Factor"/>
+
+  <!-- Ownership vocabulary -->
+  <concinst name="Blocked" type="Ownership Status"/>
+  <concinst name="Owned Or Controlled" type="Ownership Status"/>
+  <concinst name="Clear" type="Ownership Status"/>
+  <concinst name="Caught" type="Caught Mark"/>
+  <concinst name="OFAC Ownership Caution" type="Caution Mark"/>
+  <concinst name="EU Ownership Caution" type="Caution Mark"/>
+  <concinst name="UK Ownership Caution" type="Caution Mark"/>
+  <concinst name="UK Multiple Designated Holders Caution" type="Caution Mark"/>
+  <concinst name="Ownership Red Flag Caution" type="Caution Mark"/>
+  <concinst name="Board Appointment Right" type="Control Indicator Type"/>
+  <concinst name="Majority Voting Rights" type="Control Indicator Type"/>
+  <concinst name="Dominant Influence" type="Control Indicator Type"/>
+  <concinst name="Acting In Concert" type="Control Indicator Type"/>
+  <concinst name="Front Person Red Flag" type="Control Indicator Type"/>
+  <concinst name="Recent Transfer Near Designation" type="Control Indicator Type"/>
+  <concinst name="Buyback Option" type="Control Indicator Type"/>
+  <concinst name="Post Sanctions Shell" type="Control Indicator Type"/>
+
+  <!-- Regime families -->
+  <concinst name="UK" type="Regime Family"/>
+  <concinst name="OFAC" type="Regime Family"/>
+  <concinst name="EU" type="Regime Family"/>
+  <concinst name="UN" type="Regime Family"/>
+
+  <!-- Licence vocabulary -->
+  <concinst name="Legal Services" type="Licence Ground"/>
+  <concinst name="Basic Needs" type="Licence Ground"/>
+  <concinst name="Humanitarian" type="Licence Ground"/>
+  <concinst name="Wind Down" type="Licence Ground"/>
+  <concinst name="Prior Obligations" type="Licence Ground"/>
+  <concinst name="No Licence On File" type="Licence"/>
+  <concinst name="OFSI GL INT 2026 8140221 Legal Services" type="Licence"/>
+  <concinst name="OFSI GL INT 2023 9022710 Prior Obligations" type="Licence"/>
+
+  <!-- Payment purposes -->
+  <concinst name="Legal Fees" type="Payment Purpose"/>
+  <concinst name="Rent And Utilities" type="Payment Purpose"/>
+  <concinst name="Humanitarian Aid" type="Payment Purpose"/>
+  <concinst name="New Debt Financing" type="Payment Purpose"/>
+  <concinst name="Trade Settlement" type="Payment Purpose"/>
+  <concinst name="Vessel Bunkering Services" type="Payment Purpose"/>
+  <concinst name="Insurance Premium" type="Payment Purpose"/>
+  <concinst name="Personal Remittance" type="Payment Purpose"/>
+  <concinst name="Account Interest Credit" type="Payment Purpose"/>
+  <concinst name="No Documented Purpose" type="Payment Purpose"/>
+
+  <!-- Currencies and jurisdictions. Sanctioned jurisdictions here are  -->
+  <!-- fictional. Maintain this table from the live list feeds.         -->
+  <concinst name="GBP" type="Currency"/>
+  <concinst name="USD" type="Currency"/>
+  <concinst name="EUR" type="Currency"/>
+  <concinst name="Volgaria" type="Country"/>
+  <concinst name="Zubrovia" type="Country"/>
+  <concinst name="Kestrelia" type="Country"/>
+  <concinst name="United Kingdom" type="Country"/>
+  <concinst name="Ireland" type="Country"/>
+
+  <!-- Payment integrity indicators per Wolfsberg PTS 2023 and FATF R.16 -->
+  <concinst name="Originator Info Missing" type="Integrity Indicator"/>
+  <concinst name="Vague Party Descriptor" type="Integrity Indicator"/>
+  <concinst name="Omission Instruction Field 72" type="Integrity Indicator"/>
+  <concinst name="Remittance Sanctions Reference" type="Integrity Indicator"/>
+  <concinst name="BIC Country Mismatch" type="Integrity Indicator"/>
+  <concinst name="Unusual Correspondent Routing" type="Integrity Indicator"/>
+  <concinst name="Serial Repair Pattern" type="Integrity Indicator"/>
+  <concinst name="Cover Payment Without Underlying" type="Integrity Indicator"/>
+
+  <!-- Discount hard block reasons -->
+  <concinst name="Message Integrity Indicators Present" type="Discount Block Reason"/>
+  <concinst name="Eponymous Name Match" type="Discount Block Reason"/>
+  <concinst name="Ownership Caution Present" type="Discount Block Reason"/>
+  <concinst name="Ownership Data Incomplete" type="Discount Block Reason"/>
+  <concinst name="Listed Jurisdiction Residence" type="Discount Block Reason"/>
+  <concinst name="Weak Alias Route Disabled" type="Discount Block Reason"/>
+  <concinst name="Designated Minority Owner Is Transaction Party" type="Discount Block Reason"/>
+  <concinst name="IMO Unverifiable" type="Discount Block Reason"/>
+  <concinst name="Listing Changed Since Last Adjudication" type="Discount Block Reason"/>
+  <concinst name="Registry Evidence Stale" type="Discount Block Reason"/>
+
+  <!-- Match status vocabulary for analyst askables -->
+  <concinst name="Confirmed Match" type="Match Status"/>
+  <concinst name="Verified Mismatch" type="Match Status"/>
+  <concinst name="Not Comparable" type="Match Status"/>
+  <concinst name="Unverifiable" type="Match Status"/>
+  <concinst name="Complete" type="Match Status"/>
+  <concinst name="Incomplete" type="Match Status"/>
+  <concinst name="Not Applicable" type="Match Status"/>
+
+  <concinst name="Male" type="Gender"/>
+  <concinst name="Female" type="Gender"/>
+
+  <!-- Review requirements -->
+  <concinst name="MLRO Sign Off Required" type="Review Requirement"/>
+  <concinst name="Four Eyes Review Required" type="Review Requirement"/>
+  <concinst name="QA Sample Weak Alias Close" type="Review Requirement"/>
+  <concinst name="Interim Access Restriction" type="Review Requirement"/>
+  <concinst name="EU Pre Listing Lookback Review" type="Review Requirement"/>
+  <concinst name="Reportedly Deceased Referral Flag" type="Review Requirement"/>
+
+  <!-- Reporting obligations accrue per bound regime family -->
+  <concinst name="Report to OFSI as soon as practicable with reg 70 data" type="Reporting Obligation"/>
+  <concinst name="Report interim freeze to the competent authority pending UN transposition" type="Reporting Obligation"/>
+  <concinst name="File ORS blocked property report within 10 business days" type="Reporting Obligation"/>
+  <concinst name="File ORS reject report within 10 business days" type="Reporting Obligation"/>
+  <concinst name="Report immediately to EU NCA and Commission under Art 8" type="Reporting Obligation"/>
+  <concinst name="OFSI general licence usage report due per licence terms" type="Reporting Obligation"/>
+  <concinst name="Annual OFSI frozen asset review applies" type="Reporting Obligation"/>
+  <concinst name="OFAC annual blocked property report applies" type="Reporting Obligation"/>
+
+  <!-- Policy instance -->
+  <concinst name="Screening Policy" type="Policy"/>
+
+  <!-- ========================= Data facts ============================ -->
+
+  <!-- Jurisdiction reference table -->
+  <relinst type="is sanctioned jurisdiction" subject="Volgaria" object="true"/>
+  <relinst type="is sanctioned jurisdiction" subject="Zubrovia" object="true"/>
+  <relinst type="is intermediary jurisdiction" subject="Kestrelia" object="true"/>
+
+  <!-- Licence ground to purpose coverage map -->
+  <relinst type="ground covers purpose" subject="Legal Services" object="Legal Fees"/>
+  <relinst type="ground covers purpose" subject="Basic Needs" object="Rent And Utilities"/>
+  <relinst type="ground covers purpose" subject="Humanitarian" object="Humanitarian Aid"/>
+  <relinst type="ground covers purpose" subject="Wind Down" object="Trade Settlement"/>
+  <relinst type="ground covers purpose" subject="Prior Obligations" object="Personal Remittance"/>
+
+  <!-- Demo licence records. Numbers follow the OFSI INT format but are fictional. -->
+  <relinst type="has licence authority family" subject="OFSI GL INT 2026 8140221 Legal Services" object="UK"/>
+  <relinst type="has licence ground" subject="OFSI GL INT 2026 8140221 Legal Services" object="Legal Services"/>
+  <relinst type="has licence valid from" subject="OFSI GL INT 2026 8140221 Legal Services" object="2026-04-29"/>
+  <relinst type="has licence valid to" subject="OFSI GL INT 2026 8140221 Legal Services" object="2026-10-28"/>
+  <relinst type="has licence authority family" subject="OFSI GL INT 2023 9022710 Prior Obligations" object="UK"/>
+  <relinst type="has licence ground" subject="OFSI GL INT 2023 9022710 Prior Obligations" object="Prior Obligations"/>
+  <relinst type="has licence valid from" subject="OFSI GL INT 2023 9022710 Prior Obligations" object="2023-06-01"/>
+  <relinst type="has licence valid to" subject="OFSI GL INT 2023 9022710 Prior Obligations" object="2027-06-01"/>
+
+  <!-- Screening Policy operational parameters. Recalibrate here, never in rules. -->
+  <!-- The ownership caution floor must stay below 50 - the band between the      -->
+  <!-- floor and the family threshold is the OFAC FAQ 402 caution zone and must   -->
+  <!-- never be empty while a designated holder sits at or above the floor.       -->
+  <relinst type="has strong match score threshold" subject="Screening Policy" object="92"/>
+  <relinst type="has alert score floor" subject="Screening Policy" object="85"/>
+  <relinst type="has dob tolerance years" subject="Screening Policy" object="2"/>
+  <relinst type="has ownership caution floor percent" subject="Screening Policy" object="40"/>
+  <relinst type="has aggregate blocking threshold percent" subject="Screening Policy" object="50"/>
+  <relinst type="has uk majority threshold percent" subject="Screening Policy" object="50"/>
+  <relinst type="weak alias discount allowed" subject="Screening Policy" object="true"/>
+  <relinst type="year match counts as corroborator" subject="Screening Policy" object="true"/>
+  <relinst type="applies ofac lists as policy" subject="Screening Policy" object="true"/>
+  <relinst type="applies un interim freeze" subject="Screening Policy" object="true"/>
+  <relinst type="has registry staleness limit months" subject="Screening Policy" object="12"/>
+  <relinst type="has four eyes score threshold" subject="Screening Policy" object="95"/>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 1 - MATCH FEATURES AND IDENTIFIER COMPARISONS              -->
+  <!-- Wolfsberg 2019 and OFAC FAQ 5: score alone never dispositions.   -->
+  <!-- Disjunctive matching over all listed values, elimination only    -->
+  <!-- against all listed values with completeness guards. Absence of   -->
+  <!-- data is neutral, never a mismatch.                               -->
+  <!-- ================================================================ -->
+
+  <relinst type="has name match strength" object="Strong" cf="100" name="Name - score at or above the strong threshold">
+    <condition rel="has match score" subject="%S" object="%SC"/>
+    <condition rel="has strong match score threshold" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%SC is greater than or equal to %T" weight="1"/>
+  </relinst>
+
+  <relinst type="has name match strength" object="Strong" cf="100" name="Name - exact full name match is strong regardless of score">
+    <condition rel="is full name exact" subject="%S" object="%F"/>
+    <condition expression="%F is equal to true" weight="1"/>
+  </relinst>
+
+  <relinst type="has name match strength" object="Moderate" cf="100" name="Name - fuzzy score below the strong threshold">
+    <condition rel="has match score" subject="%S" object="%SC"/>
+    <condition rel="has strong match score threshold" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%SC is less than %T" weight="1"/>
+    <condition rel="is full name exact" subject="%S" object="%F" weight="1"/>
+    <condition expression="%F is not equal to true" weight="1"/>
+  </relinst>
+
+  <!-- DOB arithmetic: one gap fact per listed date of birth, sign split  -->
+  <!-- across two rules so each listed DOB yields exactly one gap item.   -->
+  <relinst type="has dob gap years item" cf="100" name="DOB - year gap where party year is at or after the listed year">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="has party dob" subject="%P" object="%PD"/>
+    <condition rel="listing has dob entry" subject="%L" object="%LD"/>
+    <condition expression="year(%PD)" value="%PY"/>
+    <condition expression="year(%LD)" value="%LY"/>
+    <condition expression="%PY - %LY" value="%D"/>
+    <condition expression="%D is greater than or equal to 0"/>
+    <condition expression="%D + 0" value="%O"/>
+  </relinst>
+
+  <relinst type="has dob gap years item" cf="100" name="DOB - year gap where party year is before the listed year">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="has party dob" subject="%P" object="%PD"/>
+    <condition rel="listing has dob entry" subject="%L" object="%LD"/>
+    <condition expression="year(%PD)" value="%PY"/>
+    <condition expression="year(%LD)" value="%LY"/>
+    <condition expression="%PY - %LY" value="%D"/>
+    <condition expression="%D is less than 0"/>
+    <condition expression="0 - %D" value="%O"/>
+  </relinst>
+
+  <!-- Minimum gap only when a gap item derived for EVERY listed DOB -   -->
+  <!-- comparable set completeness licenses elimination. A listed DOB    -->
+  <!-- with no gap item breaks the equality and elimination is off.      -->
+  <relinst type="has minimum dob gap years" cf="100" name="DOB - minimum year gap across the complete listed DOB set">
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition expression="countRelationshipInstances(%S,'has dob gap years item',*)" value="%NG"/>
+    <condition expression="countRelationshipInstances(%L,'listing has dob entry',*)" value="%NL"/>
+    <condition expression="%NG is greater than or equal to 1"/>
+    <condition expression="%NG is equal to %NL"/>
+    <condition expression="minObjects(%S,'has dob gap years item',*)" value="%O"/>
+  </relinst>
+
+  <relinst type="has dob comparison" object="Exact Match" cf="100" name="DOB - party date of birth exactly matches a listed date">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="has party dob" subject="%P" object="%PD"/>
+    <condition rel="listing has dob entry" subject="%L" object="%LD"/>
+    <condition expression="isSameDate(%PD,%LD) is equal to true"/>
+  </relinst>
+
+  <relinst type="has dob comparison" object="Year Match" cf="100" name="DOB - party birth year matches a listed year">
+    <condition rel="has dob gap years item" subject="%S" object="%G"/>
+    <condition expression="%G is equal to 0"/>
+  </relinst>
+
+  <relinst type="has dob comparison" object="Beyond Tolerance" cf="100" name="DOB - gap beyond tolerance against every listed date">
+    <condition rel="has minimum dob gap years" subject="%S" object="%M"/>
+    <condition rel="has dob tolerance years" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%M is greater than %T" weight="1"/>
+  </relinst>
+
+  <!-- DOB factors. Year match only corroborates when no exact match and  -->
+  <!-- policy says year grade counts. Beyond tolerance is one strong      -->
+  <!-- elimination factor, never sufficient alone.                        -->
+  <relinst type="has partial corroborator" object="DOB Exact Match" cf="100" name="ID - exact DOB corroborates">
+    <condition rel="has dob comparison" subject="%S" object="Exact Match"/>
+  </relinst>
+
+  <relinst type="has partial corroborator" object="DOB Year Match" cf="100" name="ID - year only DOB corroborates when policy counts it">
+    <condition rel="has dob comparison" subject="%S" object="Year Match"/>
+    <condition expression="countRelationshipInstances(%S,'has dob comparison','Exact Match') is equal to 0" weight="1"/>
+    <condition rel="year match counts as corroborator" subject="Screening Policy" object="%Y" weight="1"/>
+    <condition expression="%Y is equal to true" weight="1"/>
+  </relinst>
+
+  <relinst type="has strong differentiator" object="DOB Beyond Tolerance" cf="100" name="ID - DOB beyond tolerance against all listed dates differentiates">
+    <condition rel="has dob comparison" subject="%S" object="Beyond Tolerance"/>
+  </relinst>
+
+  <!-- Nationality: disjunctive overlap, conjunctive elimination with     -->
+  <!-- completeness on the party side and non empty sets on both sides.  -->
+  <relinst type="party has nationality" cf="100" name="ID - analyst supplied additional nationality joins the set">
+    <condition rel="has additional nationality" subject="%S" object="%O"/>
+  </relinst>
+
+  <relinst type="has partial corroborator" object="Nationality Overlap" cf="100" name="ID - a party nationality appears among the listed nationalities">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="party has nationality" subject="%P" object="%N"/>
+    <condition rel="listing has nationality" subject="%L" object="%N"/>
+  </relinst>
+
+  <relinst type="has strong differentiator" object="Nationality Difference All Listed" cf="100" name="ID - complete verified nationality set shares nothing with the listing">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="party nationality set complete" subject="%P" object="%C"/>
+    <condition expression="%C is equal to true" weight="1"/>
+    <condition expression="countRelationshipInstances(%P,'party has nationality',*) is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%L,'listing has nationality',*) is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has partial corroborator','Nationality Overlap') is equal to 0" weight="1"/>
+  </relinst>
+
+  <!-- Residence country: weak either way. A residence in a sanctioned   -->
+  <!-- jurisdiction with a strong name blocks discounting instead.       -->
+  <relinst type="has partial corroborator" object="Residence Country Match" cf="100" name="ID - residence matches the listed address country">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="has residence country" subject="%P" object="%R"/>
+    <condition rel="listing has address country" subject="%L" object="%R"/>
+  </relinst>
+
+  <relinst type="has weak differentiator" object="Residence Country Difference" cf="100" name="ID - verified residence differs from the listed address country">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="has residence country" subject="%P" object="%R"/>
+    <condition rel="listing has address country" subject="%L" object="%A"/>
+    <condition expression="%R is not equal to %A"/>
+  </relinst>
+
+  <relinst type="has weak differentiator" object="Gender Mismatch" cf="100" name="ID - recorded gender differs from the listing">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="party has gender" subject="%P" object="%PG"/>
+    <condition rel="listing has gender" subject="%L" object="%LG"/>
+    <condition expression="%PG is not equal to %LG"/>
+  </relinst>
+
+  <!-- Unique identifier statuses from analyst document checks. Number   -->
+  <!-- level checks only - name spelling variance on documents never     -->
+  <!-- discounts, per the Bank of Scotland lesson.                       -->
+  <relinst type="has decisive corroborator" object="Passport Number Match" cf="100" name="ID - passport or national ID number confirmed match">
+    <condition rel="has passport match status" subject="%S" object="Confirmed Match"/>
+  </relinst>
+
+  <relinst type="has decisive differentiator" object="Passport Number Verified Mismatch" cf="100" name="ID - passport or national ID number verified mismatch">
+    <condition rel="has passport match status" subject="%S" object="Verified Mismatch"/>
+  </relinst>
+
+  <relinst type="has decisive corroborator" object="Registration Number Match" cf="100" name="ID - company registration number confirmed match">
+    <condition rel="has registration number match status" subject="%S" object="Confirmed Match"/>
+  </relinst>
+
+  <relinst type="has decisive differentiator" object="Registration Number Verified Mismatch" cf="100" name="ID - company registration number verified mismatch">
+    <condition rel="has registration number match status" subject="%S" object="Verified Mismatch"/>
+  </relinst>
+
+  <relinst type="has decisive corroborator" object="IMO Number Match" cf="100" name="ID - registry verified IMO number matches the listing">
+    <condition rel="has registry imo verification status" subject="%S" object="Confirmed Match"/>
+  </relinst>
+
+  <relinst type="has decisive differentiator" object="IMO Number Verified Mismatch" cf="100" name="ID - registry verified IMO number differs from the listing">
+    <condition rel="has registry imo verification status" subject="%S" object="Verified Mismatch"/>
+  </relinst>
+
+  <!-- Category congruence per OFAC FAQ 5 step 2. Decisive unless the    -->
+  <!-- entity name embeds the designated personal name.                  -->
+  <relinst type="has decisive differentiator" object="Entity Type Mismatch" cf="100" name="ID - party class differs from listing class and name is not eponymous">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="has party type" subject="%P" object="%PT"/>
+    <condition rel="has listing entry type" subject="%L" object="%LT"/>
+    <condition expression="%PT is not equal to %LT" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has eponymous name indicator',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 2 - IDENTITY GRADE CANDIDATES AND PRECEDENCE LADDER        -->
+  <!-- Two layer pattern: raw grade candidates then a count gated       -->
+  <!-- ladder selecting exactly one assessment whose certainty tracks   -->
+  <!-- the winning grade rule.                                          -->
+  <!-- ================================================================ -->
+
+  <relinst type="has identity grade candidate" object="Confirmed Same" cf="95" name="Grade - decisive unique identifier corroborator confirms identity">
+    <condition rel="has decisive corroborator" subject="%S" object="%DC"/>
+  </relinst>
+
+  <relinst type="has identity grade candidate" object="Confirmed Same" cf="92" name="Grade - exact full name with exact DOB and no nationality contradiction">
+    <condition rel="is full name exact" subject="%S" object="%F"/>
+    <condition expression="%F is equal to true" weight="1"/>
+    <condition rel="has partial corroborator" subject="%S" object="DOB Exact Match"/>
+    <condition expression="countRelationshipInstances(%S,'has strong differentiator','Nationality Difference All Listed') is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has identity grade candidate" object="Probable Same" cf="85" name="Grade - strong name with two or more partial corroborators is a presumptive match">
+    <condition rel="has name match strength" subject="%S" object="Strong"/>
+    <condition expression="countRelationshipInstances(%S,'has partial corroborator',*) is greater than or equal to 2" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive corroborator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive differentiator',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has identity grade candidate" object="Weak Alias Only" cf="85" name="Grade - hit rests solely on a low quality alias with nothing to compare">
+    <condition rel="has matched name quality" subject="%S" object="Weak Alias"/>
+    <condition expression="countRelationshipInstances(%S,'has partial corroborator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive corroborator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has strong differentiator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has weak differentiator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive differentiator',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has identity grade candidate" object="Partially Corroborated" cf="75" name="Grade - exactly one partial corroborator escalates and never discounts">
+    <condition rel="has match score" subject="%S" object="%SC"/>
+    <condition expression="countRelationshipInstances(%S,'has partial corroborator',*) is equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive corroborator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive differentiator',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has identity grade candidate" object="Probable Different" cf="85" name="Grade - two independent differentiators with at least one strong and no corroboration">
+    <condition rel="has strong differentiator" subject="%S" object="%SD"/>
+    <condition expression="countRelationshipInstances(%S,'has strong differentiator',*)" value="%NS" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has weak differentiator',*)" value="%NW" weight="1"/>
+    <condition expression="%NS + %NW" value="%NT" weight="1"/>
+    <condition expression="%NT is greater than or equal to 2" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has partial corroborator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive corroborator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive differentiator',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has identity grade candidate" object="Confirmed Different" cf="95" name="Grade - a decisive differentiator with no corroboration confirms a different identity">
+    <condition rel="has decisive differentiator" subject="%S" object="%DD"/>
+    <condition expression="countRelationshipInstances(%S,'has partial corroborator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive corroborator',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has identity grade candidate" object="Indeterminate" cf="70" name="Grade - no corroborators and no meaningful differentiators on a non weak alias hit">
+    <condition rel="has match score" subject="%S" object="%SC"/>
+    <condition rel="has matched name quality" subject="%S" object="%Q" weight="1"/>
+    <condition expression="%Q is not equal to 'Weak Alias'" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has partial corroborator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive corroborator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has strong differentiator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive differentiator',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has identity grade candidate" object="Indeterminate" cf="70" name="Grade - weak alias hit with only weak differentiators stays indeterminate">
+    <condition rel="has matched name quality" subject="%S" object="Weak Alias"/>
+    <condition expression="countRelationshipInstances(%S,'has weak differentiator',*) is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has partial corroborator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive corroborator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has strong differentiator',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive differentiator',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <!-- Identity assessment ladder: Confirmed Same beats Confirmed        -->
+  <!-- Different beats Probable Same beats Probable Different beats      -->
+  <!-- Weak Alias Only beats Partially Corroborated beats Indeterminate. -->
+  <relinst type="has identity assessment" object="Confirmed Same" cf="100" name="Assessment - confirmed same takes precedence">
+    <condition rel="has identity grade candidate" subject="%S" object="Confirmed Same"/>
+  </relinst>
+
+  <relinst type="has identity assessment" object="Confirmed Different" cf="100" name="Assessment - confirmed different when no confirmed same">
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Confirmed Same') is equal to 0" weight="1"/>
+    <condition rel="has identity grade candidate" subject="%S" object="Confirmed Different"/>
+  </relinst>
+
+  <relinst type="has identity assessment" object="Probable Same" cf="100" name="Assessment - probable same when nothing confirmed">
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Confirmed Same') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Confirmed Different') is equal to 0" weight="1"/>
+    <condition rel="has identity grade candidate" subject="%S" object="Probable Same"/>
+  </relinst>
+
+  <relinst type="has identity assessment" object="Probable Different" cf="100" name="Assessment - probable different when nothing confirmed or probable same">
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Confirmed Same') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Confirmed Different') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Probable Same') is equal to 0" weight="1"/>
+    <condition rel="has identity grade candidate" subject="%S" object="Probable Different"/>
+  </relinst>
+
+  <relinst type="has identity assessment" object="Weak Alias Only" cf="100" name="Assessment - weak alias only when no substantive grade">
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Confirmed Same') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Confirmed Different') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Probable Same') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Probable Different') is equal to 0" weight="1"/>
+    <condition rel="has identity grade candidate" subject="%S" object="Weak Alias Only"/>
+  </relinst>
+
+  <relinst type="has identity assessment" object="Partially Corroborated" cf="100" name="Assessment - partial corroboration when no higher grade">
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Confirmed Same') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Confirmed Different') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Probable Same') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Probable Different') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Weak Alias Only') is equal to 0" weight="1"/>
+    <condition rel="has identity grade candidate" subject="%S" object="Partially Corroborated"/>
+  </relinst>
+
+  <relinst type="has identity assessment" object="Indeterminate" cf="100" name="Assessment - indeterminate when nothing else resolves">
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Confirmed Same') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Confirmed Different') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Probable Same') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Probable Different') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Weak Alias Only') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has identity grade candidate','Partially Corroborated') is equal to 0" weight="1"/>
+    <condition rel="has identity grade candidate" subject="%S" object="Indeterminate"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 3 - OWNERSHIP AND CONTROL RESOLUTION                       -->
+  <!-- Bounded level DAG per regime family, no self recursion. Level 0  -->
+  <!-- is direct listing, level 1 tests holdings by level 0 holders,    -->
+  <!-- level 2 tests holdings by level 0 or level 1 caught holders so   -->
+  <!-- the OFAC FAQ 402 rule that a blocked intermediate counts in      -->
+  <!-- full is structural. Exactly one stake rule per family per level  -->
+  <!-- binding a deduped caught mark - derived number facts do not      -->
+  <!-- dedupe so a second rule would double count. Sums are count       -->
+  <!-- guarded against the empty set null trap. Extending to deeper     -->
+  <!-- chains means adding one more level of rels and rules.            -->
+  <!-- OFAC and EU: aggregate GTE 50 across designated holders.         -->
+  <!-- UK reg 7: single holder strictly GT 50 or control indicators or  -->
+  <!-- a Schedule 1 para 3 joint arrangement - no aggregation of        -->
+  <!-- independent stakes.                                              -->
+  <!-- ================================================================ -->
+
+  <!-- OFAC family - level 1 -->
+  <relinst type="has ofac blocked stake percent level 1" cf="100" name="OFAC L1 - stake held by a directly SDN listed owner">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%OW"/>
+    <condition rel="has holding percent" subject="%H" object="%PC"/>
+    <condition expression="countRelationshipInstances(%OW,'is listed on','OFAC SDN List') is greater than or equal to 1"/>
+    <condition expression="%PC + 0" value="%O"/>
+  </relinst>
+
+  <relinst type="has ofac aggregate percent level 1" cf="100" name="OFAC L1 - aggregate SDN held percentage">
+    <condition expression="countRelationshipInstances(%S,'has ofac blocked stake percent level 1',*) is greater than or equal to 1"/>
+    <condition expression="sumObjects(%S,'has ofac blocked stake percent level 1',*)" value="%O"/>
+  </relinst>
+
+  <relinst type="has ofac caught mark level 1" object="Caught" cf="100" name="OFAC L1 - directly SDN listed party is caught">
+    <condition expression="countRelationshipInstances(%S,'is listed on','OFAC SDN List') is greater than or equal to 1"/>
+  </relinst>
+
+  <relinst type="has ofac caught mark level 1" object="Caught" cf="100" name="OFAC L1 - aggregate SDN ownership at or above threshold is caught">
+    <condition rel="has ofac aggregate percent level 1" subject="%S" object="%A"/>
+    <condition rel="has aggregate blocking threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%A is greater than or equal to %T" weight="1"/>
+  </relinst>
+
+  <!-- OFAC family - level 2 over caught holders -->
+  <relinst type="has ofac blocked stake percent level 2" cf="100" name="OFAC L2 - stake held by a level one caught owner counts in full per FAQ 402">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%OW"/>
+    <condition rel="has holding percent" subject="%H" object="%PC"/>
+    <condition rel="has ofac caught mark level 1" subject="%OW" object="Caught"/>
+    <condition expression="%PC + 0" value="%O"/>
+  </relinst>
+
+  <relinst type="has ofac aggregate percent level 2" cf="100" name="OFAC L2 - aggregate percentage held by caught owners">
+    <condition expression="countRelationshipInstances(%S,'has ofac blocked stake percent level 2',*) is greater than or equal to 1"/>
+    <condition expression="sumObjects(%S,'has ofac blocked stake percent level 2',*)" value="%O"/>
+  </relinst>
+
+  <relinst type="has ofac ownership finding" object="Blocked" cf="100" name="OFAC - blocked by operation of law at level 1">
+    <condition rel="has ofac aggregate percent level 1" subject="%S" object="%A"/>
+    <condition rel="has aggregate blocking threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%A is greater than or equal to %T" weight="1"/>
+  </relinst>
+
+  <relinst type="has ofac ownership finding" object="Blocked" cf="100" name="OFAC - blocked by operation of law through the chain at level 2">
+    <condition rel="has ofac aggregate percent level 2" subject="%S" object="%A"/>
+    <condition rel="has aggregate blocking threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%A is greater than or equal to %T" weight="1"/>
+  </relinst>
+
+  <!-- OFAC caution band per FAQ 402: sub threshold designated ownership -->
+  <!-- refers, never clears. The floor is policy tunable downward only.  -->
+  <relinst type="has ownership caution mark" object="OFAC Ownership Caution" cf="100" name="OFAC - aggregate in the caution band below threshold">
+    <condition rel="has ofac aggregate percent level 1" subject="%S" object="%A"/>
+    <condition rel="has ownership caution floor percent" subject="Screening Policy" object="%F" weight="1"/>
+    <condition rel="has aggregate blocking threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%A is greater than or equal to %F" weight="1"/>
+    <condition expression="%A is less than %T" weight="1"/>
+  </relinst>
+
+  <relinst type="has ownership caution mark" object="OFAC Ownership Caution" cf="100" name="OFAC - caution propagates through a majority link from a cautioned holder">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%OW"/>
+    <condition rel="has holding percent" subject="%H" object="%PC"/>
+    <condition rel="has aggregate blocking threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%PC is greater than or equal to %T" weight="1"/>
+    <condition rel="has ofac aggregate percent level 1" subject="%OW" object="%A"/>
+    <condition rel="has ownership caution floor percent" subject="Screening Policy" object="%F" weight="1"/>
+    <condition expression="%A is greater than or equal to %F" weight="1"/>
+    <condition expression="%A is less than %T" weight="1"/>
+  </relinst>
+
+  <!-- EU family - Best Practices ST 11623/24: aggregate GTE 50           -->
+  <!-- regardless of concert, threshold gated cascade like OFAC.          -->
+  <relinst type="has eu blocked stake percent level 1" cf="100" name="EU L1 - stake held by a directly EU listed owner">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%OW"/>
+    <condition rel="has holding percent" subject="%H" object="%PC"/>
+    <condition expression="countRelationshipInstances(%OW,'is listed on','EU Financial Sanctions List') is greater than or equal to 1"/>
+    <condition expression="%PC + 0" value="%O"/>
+  </relinst>
+
+  <relinst type="has eu aggregate percent level 1" cf="100" name="EU L1 - aggregate EU listed held percentage">
+    <condition expression="countRelationshipInstances(%S,'has eu blocked stake percent level 1',*) is greater than or equal to 1"/>
+    <condition expression="sumObjects(%S,'has eu blocked stake percent level 1',*)" value="%O"/>
+  </relinst>
+
+  <relinst type="has eu caught mark level 1" object="Caught" cf="100" name="EU L1 - directly EU listed party is caught">
+    <condition expression="countRelationshipInstances(%S,'is listed on','EU Financial Sanctions List') is greater than or equal to 1"/>
+  </relinst>
+
+  <relinst type="has eu caught mark level 1" object="Caught" cf="100" name="EU L1 - aggregate EU ownership at or above threshold is caught">
+    <condition rel="has eu aggregate percent level 1" subject="%S" object="%A"/>
+    <condition rel="has aggregate blocking threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%A is greater than or equal to %T" weight="1"/>
+  </relinst>
+
+  <relinst type="has eu blocked stake percent level 2" cf="100" name="EU L2 - stake held by a level one caught owner counts in full">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%OW"/>
+    <condition rel="has holding percent" subject="%H" object="%PC"/>
+    <condition rel="has eu caught mark level 1" subject="%OW" object="Caught"/>
+    <condition expression="%PC + 0" value="%O"/>
+  </relinst>
+
+  <relinst type="has eu aggregate percent level 2" cf="100" name="EU L2 - aggregate percentage held by caught owners">
+    <condition expression="countRelationshipInstances(%S,'has eu blocked stake percent level 2',*) is greater than or equal to 1"/>
+    <condition expression="sumObjects(%S,'has eu blocked stake percent level 2',*)" value="%O"/>
+  </relinst>
+
+  <relinst type="has eu ownership finding" object="Owned Or Controlled" cf="100" name="EU - owned at level 1 under the Best Practices aggregate test">
+    <condition rel="has eu aggregate percent level 1" subject="%S" object="%A"/>
+    <condition rel="has aggregate blocking threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%A is greater than or equal to %T" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has eu presumption rebuttal evidence',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has eu ownership finding" object="Owned Or Controlled" cf="100" name="EU - owned through the chain at level 2">
+    <condition rel="has eu aggregate percent level 2" subject="%S" object="%A"/>
+    <condition rel="has aggregate blocking threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%A is greater than or equal to %T" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has eu presumption rebuttal evidence',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has ownership caution mark" object="EU Ownership Caution" cf="100" name="EU - rebuttal evidence downgrades the presumption to referral">
+    <condition rel="has eu aggregate percent level 1" subject="%S" object="%A"/>
+    <condition rel="has aggregate blocking threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%A is greater than or equal to %T" weight="1"/>
+    <condition rel="has eu presumption rebuttal evidence" subject="%S" object="%RB"/>
+    <condition expression="%RB is equal to true" weight="1"/>
+  </relinst>
+
+  <relinst type="has ownership caution mark" object="EU Ownership Caution" cf="100" name="EU - aggregate in the caution band below threshold">
+    <condition rel="has eu aggregate percent level 1" subject="%S" object="%A"/>
+    <condition rel="has ownership caution floor percent" subject="Screening Policy" object="%F" weight="1"/>
+    <condition rel="has aggregate blocking threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%A is greater than or equal to %F" weight="1"/>
+    <condition expression="%A is less than %T" weight="1"/>
+  </relinst>
+
+  <!-- UK family - reg 7 with Schedule 1. Single holder strictly GT 50   -->
+  <!-- on shares or votes or board rights, control through dominant      -->
+  <!-- influence, or combined holdings under a para 3 joint arrangement. -->
+  <relinst type="has uk designated holder" cf="100" name="UK - records each UKSL designated holder distinctly">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%O"/>
+    <condition expression="countRelationshipInstances(%O,'is listed on','UK Sanctions List') is greater than or equal to 1"/>
+  </relinst>
+
+  <relinst type="has uk designated holder stake percent" cf="100" name="UK - stake held by a UKSL designated owner">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%OW"/>
+    <condition rel="has holding percent" subject="%H" object="%PC"/>
+    <condition expression="countRelationshipInstances(%OW,'is listed on','UK Sanctions List') is greater than or equal to 1"/>
+    <condition expression="%PC + 0" value="%O"/>
+  </relinst>
+
+  <relinst type="has uk designated aggregate percent" cf="100" name="UK - informational aggregate of designated stakes">
+    <condition expression="countRelationshipInstances(%S,'has uk designated holder stake percent',*) is greater than or equal to 1"/>
+    <condition expression="sumObjects(%S,'has uk designated holder stake percent',*)" value="%O"/>
+  </relinst>
+
+  <relinst type="has uk owned mark level 1" object="Caught" cf="100" name="UK L1 - single designated holder strictly above the majority threshold">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%OW"/>
+    <condition rel="has holding percent" subject="%H" object="%PC"/>
+    <condition expression="countRelationshipInstances(%OW,'is listed on','UK Sanctions List') is greater than or equal to 1"/>
+    <condition rel="has uk majority threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%PC is greater than %T" weight="1"/>
+  </relinst>
+
+  <relinst type="has uk owned mark level 1" object="Caught" cf="100" name="UK L1 - control indicator held by a designated holder meets the control limb">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%OW"/>
+    <condition rel="has control indicator" subject="%H" object="%CI"/>
+    <condition expression="(%CI is equal to 'Board Appointment Right') or (%CI is equal to 'Majority Voting Rights') or (%CI is equal to 'Dominant Influence')" weight="1"/>
+    <condition expression="countRelationshipInstances(%OW,'is listed on','UK Sanctions List') is greater than or equal to 1"/>
+  </relinst>
+
+  <relinst type="has uk joint arrangement stake percent" cf="100" name="UK - stake inside a Schedule 1 para 3 joint arrangement by a designated holder">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%OW"/>
+    <condition rel="has holding percent" subject="%H" object="%PC"/>
+    <condition rel="is under joint arrangement" subject="%H" object="%J"/>
+    <condition expression="%J is equal to true"/>
+    <condition expression="countRelationshipInstances(%OW,'is listed on','UK Sanctions List') is greater than or equal to 1"/>
+    <condition expression="%PC + 0" value="%O"/>
+  </relinst>
+
+  <relinst type="has uk owned mark level 1" object="Caught" cf="100" name="UK L1 - combined joint arrangement holdings strictly above the majority threshold">
+    <condition expression="countRelationshipInstances(%S,'has uk joint arrangement stake percent',*) is greater than or equal to 1"/>
+    <condition expression="sumObjects(%S,'has uk joint arrangement stake percent',*)" value="%JA"/>
+    <condition rel="has uk majority threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%JA is greater than %T" weight="1"/>
+  </relinst>
+
+  <relinst type="has uk caught mark level 1" object="Caught" cf="100" name="UK L1 - directly UKSL listed party is caught">
+    <condition expression="countRelationshipInstances(%S,'is listed on','UK Sanctions List') is greater than or equal to 1"/>
+  </relinst>
+
+  <relinst type="has uk caught mark level 1" object="Caught" cf="100" name="UK L1 - owned or controlled party is caught">
+    <condition rel="has uk owned mark level 1" subject="%S" object="Caught"/>
+  </relinst>
+
+  <relinst type="has uk owned mark level 2" object="Caught" cf="100" name="UK L2 - majority stake link from a level one caught holder completes the chain">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%OW"/>
+    <condition rel="has holding percent" subject="%H" object="%PC"/>
+    <condition rel="has uk caught mark level 1" subject="%OW" object="Caught"/>
+    <condition rel="has uk majority threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%PC is greater than %T" weight="1"/>
+  </relinst>
+
+  <relinst type="has uk owned mark level 2" object="Caught" cf="100" name="UK L2 - control indicator link from a level one caught holder">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%OW"/>
+    <condition rel="has control indicator" subject="%H" object="%CI"/>
+    <condition expression="(%CI is equal to 'Board Appointment Right') or (%CI is equal to 'Majority Voting Rights') or (%CI is equal to 'Dominant Influence')" weight="1"/>
+    <condition rel="has uk caught mark level 1" subject="%OW" object="Caught"/>
+  </relinst>
+
+  <relinst type="has uk ownership finding" object="Owned Or Controlled" cf="100" name="UK - owned or controlled at level 1">
+    <condition rel="has uk owned mark level 1" subject="%S" object="Caught"/>
+  </relinst>
+
+  <relinst type="has uk ownership finding" object="Owned Or Controlled" cf="100" name="UK - owned or controlled through the chain at level 2">
+    <condition rel="has uk owned mark level 2" subject="%S" object="Caught"/>
+  </relinst>
+
+  <!-- UK cautions: multiple designated holders below any single         -->
+  <!-- majority, sub threshold bands, acting in concert suspicion, and   -->
+  <!-- propagation through majority links. UK strict GT means an exact   -->
+  <!-- 50 percent single stake also lands in the caution band.           -->
+  <relinst type="has ownership caution mark" object="UK Multiple Designated Holders Caution" cf="100" name="UK - two or more designated holders with material combined stake but no single majority">
+    <condition expression="countRelationshipInstances(%S,'has uk designated holder',*) is greater than or equal to 2"/>
+    <condition rel="has uk designated aggregate percent" subject="%S" object="%A"/>
+    <condition rel="has ownership caution floor percent" subject="Screening Policy" object="%F" weight="1"/>
+    <condition expression="%A is greater than or equal to %F" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has uk owned mark level 1',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has uk owned mark level 2',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has ownership caution mark" object="UK Ownership Caution" cf="100" name="UK - designated aggregate in the caution band up to and including the threshold">
+    <condition rel="has uk designated aggregate percent" subject="%S" object="%A"/>
+    <condition rel="has ownership caution floor percent" subject="Screening Policy" object="%F" weight="1"/>
+    <condition rel="has uk majority threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%A is greater than or equal to %F" weight="1"/>
+    <condition expression="%A is less than or equal to %T" weight="1"/>
+  </relinst>
+
+  <relinst type="has ownership caution mark" object="UK Ownership Caution" cf="100" name="UK - acting in concert suspicion routes to the control limb judgment">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%OW"/>
+    <condition rel="has control indicator" subject="%H" object="Acting In Concert"/>
+    <condition expression="countRelationshipInstances(%OW,'is listed on','UK Sanctions List') is greater than or equal to 1"/>
+  </relinst>
+
+  <relinst type="has ownership caution mark" object="UK Ownership Caution" cf="100" name="UK - caution propagates through a majority link from a cautioned holder">
+    <condition rel="is holding in" subject="%H" object="%S"/>
+    <condition rel="is held by" subject="%H" object="%OW"/>
+    <condition rel="has holding percent" subject="%H" object="%PC"/>
+    <condition rel="has uk majority threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%PC is greater than %T" weight="1"/>
+    <condition rel="has uk designated aggregate percent" subject="%OW" object="%A"/>
+    <condition rel="has ownership caution floor percent" subject="Screening Policy" object="%F" weight="1"/>
+    <condition expression="%A is greater than or equal to %F" weight="1"/>
+    <condition expression="%A is less than or equal to %T" weight="1"/>
+  </relinst>
+
+  <relinst type="has ownership caution mark" object="Ownership Red Flag Caution" cf="100" name="Ownership - Best Practices para 71 red flag on the entity refers regardless of arithmetic">
+    <condition rel="has ownership red flag" subject="%S" object="%RF"/>
+  </relinst>
+
+  <!-- Ownership clear status: the earned false positive route for       -->
+  <!-- ownership refresh hits. Every family finding absent, no caution   -->
+  <!-- anywhere, complete fresh registry data, FAQ 403 gate answered no. -->
+  <relinst type="has ownership clear status" object="Clear" cf="100" name="Ownership - resolved below every family threshold with complete fresh registry evidence">
+    <condition rel="has hit archetype" subject="%S" object="Ownership Refresh"/>
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has ownership data completeness" subject="%S" object="Complete"/>
+    <condition expression="countRelationshipInstances(%P,'has ofac ownership finding',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%P,'has eu ownership finding',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%P,'has uk ownership finding',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%P,'has ownership caution mark',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%P,'has ownership red flag',*) is equal to 0" weight="1"/>
+    <condition rel="minority designated owner is transaction party" subject="%S" object="Verified Mismatch" weight="1"/>
+    <condition rel="has registry evidence age months" subject="%P" object="%AGE" weight="1"/>
+    <condition rel="has registry staleness limit months" subject="Screening Policy" object="%LIM" weight="1"/>
+    <condition expression="%AGE is less than or equal to %LIM" weight="1"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 4 - REGIME NEXUS AND TARGET DESIGNATION BASIS              -->
+  <!-- Nexus derives from booking entity and payment currency only so   -->
+  <!-- fringe flips stay single fact. SAMLA s.21 UK person, EU Art 17,  -->
+  <!-- USD clearing presumption for OFAC. An OFAC designation with no   -->
+  <!-- US nexus is policy exposure, never a statutory block.            -->
+  <!-- ================================================================ -->
+
+  <relinst type="regime family binds hit" object="UK" cf="100" name="Nexus - UK incorporated booking entity is a UK person under SAMLA s.21">
+    <condition rel="has booking entity" subject="%S" object="%B"/>
+    <condition rel="is uk incorporated" subject="%B" object="%U"/>
+    <condition expression="%U is equal to true"/>
+  </relinst>
+
+  <relinst type="regime family binds hit" object="UK" cf="100" name="Nexus - sterling payment routes through UK clearing">
+    <condition rel="relates to payment" subject="%S" object="%PM"/>
+    <condition rel="has payment currency" subject="%PM" object="GBP"/>
+  </relinst>
+
+  <relinst type="regime family binds hit" object="OFAC" cf="100" name="Nexus - US dollar payment presumes US correspondent clearing">
+    <condition rel="relates to payment" subject="%S" object="%PM"/>
+    <condition rel="has payment currency" subject="%PM" object="USD"/>
+  </relinst>
+
+  <relinst type="regime family binds hit" object="OFAC" cf="100" name="Nexus - explicit US correspondent in the payment chain">
+    <condition rel="relates to payment" subject="%S" object="%PM"/>
+    <condition rel="has us correspondent in chain" subject="%PM" object="%U"/>
+    <condition expression="%U is equal to true"/>
+  </relinst>
+
+  <relinst type="regime family binds hit" object="EU" cf="100" name="Nexus - EU incorporated booking entity under Art 17">
+    <condition rel="has booking entity" subject="%S" object="%B"/>
+    <condition rel="is eu incorporated" subject="%B" object="%E"/>
+    <condition expression="%E is equal to true"/>
+  </relinst>
+
+  <relinst type="regime family binds hit" object="EU" cf="100" name="Nexus - euro payment routes through EU payment systems">
+    <condition rel="relates to payment" subject="%S" object="%PM"/>
+    <condition rel="has payment currency" subject="%PM" object="EUR"/>
+  </relinst>
+
+  <relinst type="regime family binds hit" object="EU" cf="100" name="Nexus - explicit EU nexus marker on the payment">
+    <condition rel="relates to payment" subject="%S" object="%PM"/>
+    <condition rel="has eu nexus marker" subject="%PM" object="%E"/>
+    <condition expression="%E is equal to true"/>
+  </relinst>
+
+  <!-- Which families designate the target: by listing or by ownership.  -->
+  <!-- Specified ship entries carry Part 6 shipping prohibitions, not    -->
+  <!-- the reg 11 asset freeze, so they never ground a freeze basis.     -->
+  <relinst type="has target designation basis" object="UK" cf="100" name="Basis - listing on the UK Sanctions List">
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="is on sanctions list" subject="%L" object="UK Sanctions List"/>
+    <condition expression="countRelationshipInstances(%L,'is specified ship entry',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has target designation basis" object="UK" cf="100" name="Basis - party owned or controlled under reg 7">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has uk ownership finding" subject="%P" object="%F"/>
+  </relinst>
+
+  <relinst type="has target designation basis" object="OFAC" cf="100" name="Basis - listing on the OFAC SDN list">
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="is on sanctions list" subject="%L" object="OFAC SDN List"/>
+  </relinst>
+
+  <relinst type="has target designation basis" object="OFAC" cf="100" name="Basis - party blocked under the 50 percent rule">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has ofac ownership finding" subject="%P" object="%F"/>
+  </relinst>
+
+  <relinst type="has target designation basis" object="EU" cf="100" name="Basis - listing on the EU financial sanctions list">
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="is on sanctions list" subject="%L" object="EU Financial Sanctions List"/>
+  </relinst>
+
+  <relinst type="has target designation basis" object="EU" cf="100" name="Basis - party owned under the EU Best Practices test">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has eu ownership finding" subject="%P" object="%F"/>
+  </relinst>
+
+  <relinst type="has target designation basis" object="UK" cf="100" name="Basis - payment routed to a reg 17A designated bank">
+    <condition rel="relates to payment" subject="%S" object="%PM"/>
+    <condition rel="has beneficiary bank" subject="%PM" object="%B"/>
+    <condition rel="is designated for reg 17a purposes" subject="%B" object="%D"/>
+    <condition expression="%D is equal to true" weight="1"/>
+  </relinst>
+
+  <relinst type="has target designation basis" object="UN" cf="100" name="Basis - listing on the UN consolidated list">
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="is on sanctions list" subject="%L" object="UN Consolidated List"/>
+  </relinst>
+
+  <relinst type="has policy only ofac exposure" object="true" cf="100" name="Nexus - OFAC designation without US nexus is policy exposure only">
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','OFAC') is greater than or equal to 1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','OFAC') is equal to 0" weight="1"/>
+    <condition rel="applies ofac lists as policy" subject="Screening Policy" object="%AP" weight="1"/>
+    <condition expression="%AP is equal to true" weight="1"/>
+  </relinst>
+
+  <relinst type="has un gap exposure" object="true" cf="100" name="Nexus - UN listed but domestic transposition pending in the bound jurisdiction">
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="is on sanctions list" subject="%L" object="UN Consolidated List"/>
+    <condition rel="eu transposition pending" subject="%L" object="%G" weight="1"/>
+    <condition expression="%G is equal to true" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','UK') is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','EU') is equal to 0" weight="1"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 5 - LICENCE APPLICABILITY                                  -->
+  <!-- A licence applies per authorising family only - an OFSI general  -->
+  <!-- licence never licenses OFAC exposure. Validity is tested against -->
+  <!-- the payment date inclusively with negated date comparators.      -->
+  <!-- ================================================================ -->
+
+  <relinst type="family licensed for hit" object="UK" cf="100" name="Licence - OFSI licence in force covering the documented purpose">
+    <condition rel="has ofsi licence on file" subject="%S" object="%LIC"/>
+    <condition expression="%LIC is not equal to 'No Licence On File'" weight="1"/>
+    <condition rel="has licence authority family" subject="%LIC" object="UK" weight="1"/>
+    <condition rel="has licence ground" subject="%LIC" object="%G" weight="1"/>
+    <condition rel="has documented payment purpose" subject="%S" object="%PP" weight="1"/>
+    <condition rel="ground covers purpose" subject="%G" object="%PP" weight="1"/>
+    <condition rel="relates to payment" subject="%S" object="%PM" weight="1"/>
+    <condition rel="has payment date" subject="%PM" object="%PD" weight="1"/>
+    <condition rel="has licence valid from" subject="%LIC" object="%FROM" weight="1"/>
+    <condition rel="has licence valid to" subject="%LIC" object="%TO" weight="1"/>
+    <condition expression="isAfterDate(%FROM,%PD) is equal to false" weight="1"/>
+    <condition expression="isBeforeDate(%TO,%PD) is equal to false" weight="1"/>
+    <condition rel="has licence conditions met" subject="%LIC" object="%CM" weight="1"/>
+    <condition expression="%CM is equal to true" weight="1"/>
+    <condition rel="has licence caps ok" subject="%LIC" object="%CAP" weight="1"/>
+    <condition expression="%CAP is equal to true" weight="1"/>
+  </relinst>
+
+  <relinst type="family licensed for hit" object="OFAC" cf="100" name="Licence - OFAC general or specific license in force covering the documented purpose">
+    <condition rel="has ofac licence on file" subject="%S" object="%LIC"/>
+    <condition expression="%LIC is not equal to 'No Licence On File'" weight="1"/>
+    <condition rel="has licence authority family" subject="%LIC" object="OFAC" weight="1"/>
+    <condition rel="has licence ground" subject="%LIC" object="%G" weight="1"/>
+    <condition rel="has documented payment purpose" subject="%S" object="%PP" weight="1"/>
+    <condition rel="ground covers purpose" subject="%G" object="%PP" weight="1"/>
+    <condition rel="relates to payment" subject="%S" object="%PM" weight="1"/>
+    <condition rel="has payment date" subject="%PM" object="%PD" weight="1"/>
+    <condition rel="has licence valid from" subject="%LIC" object="%FROM" weight="1"/>
+    <condition rel="has licence valid to" subject="%LIC" object="%TO" weight="1"/>
+    <condition expression="isAfterDate(%FROM,%PD) is equal to false" weight="1"/>
+    <condition expression="isBeforeDate(%TO,%PD) is equal to false" weight="1"/>
+    <condition rel="has licence conditions met" subject="%LIC" object="%CM" weight="1"/>
+    <condition expression="%CM is equal to true" weight="1"/>
+    <condition rel="has licence caps ok" subject="%LIC" object="%CAP" weight="1"/>
+    <condition expression="%CAP is equal to true" weight="1"/>
+  </relinst>
+
+  <relinst type="has unlicensed bound blocking family" object="UK" cf="100" name="Exposure - UK freeze basis bound and not licensed">
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','UK') is greater than or equal to 1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','UK') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'family licensed for hit','UK') is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has unlicensed bound blocking family" object="OFAC" cf="100" name="Exposure - OFAC blocking basis bound and not licensed">
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','OFAC') is greater than or equal to 1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','OFAC') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'family licensed for hit','OFAC') is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has unlicensed bound blocking family" object="EU" cf="100" name="Exposure - EU freeze basis bound with no NCA derogation modelled">
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','EU') is greater than or equal to 1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','EU') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'family licensed for hit','EU') is equal to 0" weight="1"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 6 - DISCOUNT HARD BLOCKS                                   -->
+  <!-- Reasons a false positive close is forbidden regardless of the    -->
+  <!-- identifier arithmetic. Wolfsberg incomplete or unreliable        -->
+  <!-- information rule, stripping doctrine, FAQ 403, eponymous names.  -->
+  <!-- ================================================================ -->
+
+  <relinst type="has discount block" object="Message Integrity Indicators Present" cf="100" name="Block - message data cannot be trusted for discounting">
+    <condition expression="countRelationshipInstances(%S,'has integrity indicator',*) is greater than or equal to 1"/>
+  </relinst>
+
+  <relinst type="has discount block" object="Eponymous Name Match" cf="100" name="Block - entity name embeds the designated personal name">
+    <condition rel="has eponymous name indicator" subject="%S" object="%E"/>
+    <condition expression="%E is equal to true"/>
+  </relinst>
+
+  <relinst type="has discount block" object="Weak Alias Route Disabled" cf="100" name="Block - policy has disabled the weak alias discount route">
+    <condition rel="has matched name quality" subject="%S" object="Weak Alias"/>
+    <condition rel="weak alias discount allowed" subject="Screening Policy" object="%W" weight="1"/>
+    <condition expression="%W is equal to false" weight="1"/>
+  </relinst>
+
+  <relinst type="has discount block" object="Listed Jurisdiction Residence" cf="100" name="Block - strong name with residence in a sanctioned jurisdiction">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has residence country" subject="%P" object="%R"/>
+    <condition rel="is sanctioned jurisdiction" subject="%R" object="%SJ"/>
+    <condition expression="%SJ is equal to true" weight="1"/>
+    <condition rel="has name match strength" subject="%S" object="Strong" weight="1"/>
+  </relinst>
+
+  <relinst type="has discount block" object="Designated Minority Owner Is Transaction Party" cf="100" name="Block - FAQ 403 the blocked minority owner is itself a transaction party">
+    <condition rel="minority designated owner is transaction party" subject="%S" object="Confirmed Match"/>
+  </relinst>
+
+  <relinst type="has discount block" object="Designated Minority Owner Is Transaction Party" cf="100" name="Block - FAQ 403 status unknown on an ownership hit">
+    <condition rel="has hit archetype" subject="%S" object="Ownership Refresh"/>
+    <condition rel="minority designated owner is transaction party" subject="%S" object="Not Comparable"/>
+  </relinst>
+
+  <relinst type="has discount block" object="Ownership Caution Present" cf="100" name="Block - an ownership caution stands against the screened party">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has ownership caution mark" subject="%P" object="%CM"/>
+  </relinst>
+
+  <relinst type="has discount block" object="Ownership Data Incomplete" cf="100" name="Block - ownership registry data is incomplete">
+    <condition rel="has ownership data completeness" subject="%S" object="Incomplete"/>
+  </relinst>
+
+  <relinst type="has discount block" object="IMO Unverifiable" cf="100" name="Block - the vessel IMO cannot be verified from independent registry data">
+    <condition rel="has registry imo verification status" subject="%S" object="Unverifiable"/>
+  </relinst>
+
+  <relinst type="has discount block" object="Listing Changed Since Last Adjudication" cf="100" name="Block - the list entry changed so a prior discount is not portable">
+    <condition rel="listing changed since last adjudication" subject="%S" object="%C"/>
+    <condition expression="%C is equal to true"/>
+  </relinst>
+
+  <relinst type="has discount block" object="Registry Evidence Stale" cf="100" name="Block - registry evidence is older than the staleness limit">
+    <condition rel="has hit archetype" subject="%S" object="Ownership Refresh"/>
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has registry evidence age months" subject="%P" object="%AGE"/>
+    <condition rel="has registry staleness limit months" subject="Screening Policy" object="%LIM" weight="1"/>
+    <condition expression="%AGE is greater than %LIM" weight="1"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 7 - CANDIDATE OUTCOMES                                     -->
+  <!-- Weight one gates throughout: the carrier fact certainty flows    -->
+  <!-- to the outcome. Rule cf below 100 marks routes whose evidence    -->
+  <!-- is derived rather than direct.                                   -->
+  <!-- ================================================================ -->
+
+  <!-- Freeze candidates -->
+  <relinst type="has candidate outcome" object="True Match - Freeze and Report" cf="100" name="Freeze - UK designated customer relationship under reg 11">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','UK') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','UK') is greater than or equal to 1" weight="1"/>
+    <condition rel="has unlicensed bound blocking family" subject="%S" object="UK" weight="1"/>
+    <condition rel="has customer relationship role" subject="%S" object="Account Holder" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="True Match - Freeze and Report" cf="100" name="Freeze - EU designated customer relationship under Art 2">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','EU') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','EU') is greater than or equal to 1" weight="1"/>
+    <condition rel="has unlicensed bound blocking family" subject="%S" object="EU" weight="1"/>
+    <condition rel="has customer relationship role" subject="%S" object="Account Holder" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="True Match - Freeze and Report" cf="100" name="Freeze - OFAC blocks the payment or property with US nexus">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','OFAC') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','OFAC') is greater than or equal to 1" weight="1"/>
+    <condition rel="has unlicensed bound blocking family" subject="%S" object="OFAC" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="True Match - Freeze and Report" cf="100" name="Freeze - unlicensed inbound receipt of target funds is held not returned">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+    <condition rel="relates to payment" subject="%S" object="%PM" weight="1"/>
+    <condition rel="is inbound receipt of target funds" subject="%PM" object="%IR" weight="1"/>
+    <condition expression="%IR is equal to true" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has unlicensed bound blocking family',*) is greater than or equal to 1" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="True Match - Freeze and Report" cf="100" name="Freeze - inbound credit to the target own frozen account is credited and frozen">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+    <condition rel="relates to payment" subject="%S" object="%PM" weight="1"/>
+    <condition rel="is inbound credit to own frozen account" subject="%PM" object="%IC" weight="1"/>
+    <condition expression="%IC is equal to true" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis',*) is greater than or equal to 1" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="True Match - Freeze and Report" cf="90" name="Freeze - entity blocked by OFAC ownership aggregation with US nexus">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has ofac ownership finding" subject="%P" object="%F"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','OFAC') is greater than or equal to 1" weight="1"/>
+    <condition rel="has unlicensed bound blocking family" subject="%S" object="OFAC" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="True Match - Freeze and Report" cf="90" name="Freeze - customer entity owned or controlled under reg 7">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has uk ownership finding" subject="%P" object="%F"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','UK') is greater than or equal to 1" weight="1"/>
+    <condition rel="has unlicensed bound blocking family" subject="%S" object="UK" weight="1"/>
+    <condition rel="has customer relationship role" subject="%S" object="Account Holder" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="True Match - Freeze and Report" cf="90" name="Freeze - customer entity owned under the EU Best Practices test">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has eu ownership finding" subject="%P" object="%F"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','EU') is greater than or equal to 1" weight="1"/>
+    <condition rel="has unlicensed bound blocking family" subject="%S" object="EU" weight="1"/>
+    <condition rel="has customer relationship role" subject="%S" object="Account Holder" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="True Match - Freeze and Report" cf="93" name="Freeze - UN listed with transposition pending under the interim freeze policy per FATF R.6">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+    <condition rel="has un gap exposure" subject="%S" object="%G" weight="1"/>
+    <condition expression="%G is equal to true" weight="1"/>
+    <condition rel="applies un interim freeze" subject="Screening Policy" object="%POL" weight="1"/>
+    <condition expression="%POL is equal to true" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit',*) is greater than or equal to 1" weight="1"/>
+  </relinst>
+
+  <!-- Reject candidates -->
+  <relinst type="has candidate outcome" object="True Match - Reject and Report" cf="100" name="Reject - UK outbound payment to a designated party is refused under reg 12">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','UK') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','UK') is greater than or equal to 1" weight="1"/>
+    <condition rel="has unlicensed bound blocking family" subject="%S" object="UK" weight="1"/>
+    <condition rel="relates to payment" subject="%S" object="%PM" weight="1"/>
+    <condition rel="is outbound payment" subject="%PM" object="%OB" weight="1"/>
+    <condition expression="%OB is equal to true" weight="1"/>
+    <condition rel="has customer relationship role" subject="%S" object="%RL" weight="1"/>
+    <condition expression="(%RL is equal to 'Payment Beneficiary') or (%RL is equal to 'Ultimate Beneficiary') or (%RL is equal to 'Counterparty Bank')" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="True Match - Reject and Report" cf="90" name="Reject - UK outbound payment to an entity owned or controlled by a designated person">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has uk ownership finding" subject="%P" object="%F"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','UK') is greater than or equal to 1" weight="1"/>
+    <condition rel="has unlicensed bound blocking family" subject="%S" object="UK" weight="1"/>
+    <condition rel="relates to payment" subject="%S" object="%PM" weight="1"/>
+    <condition rel="is outbound payment" subject="%PM" object="%OB" weight="1"/>
+    <condition expression="%OB is equal to true" weight="1"/>
+    <condition rel="has customer relationship role" subject="%S" object="%RL" weight="1"/>
+    <condition expression="(%RL is equal to 'Payment Beneficiary') or (%RL is equal to 'Ultimate Beneficiary')" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="True Match - Reject and Report" cf="95" name="Reject - payment to an account at a reg 17A designated bank">
+    <condition rel="relates to payment" subject="%S" object="%PM"/>
+    <condition rel="has beneficiary bank" subject="%PM" object="%B"/>
+    <condition rel="is designated for reg 17a purposes" subject="%B" object="%D"/>
+    <condition expression="%D is equal to true" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','UK') is greater than or equal to 1" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="True Match - Reject and Report" cf="95" name="Reject - SSI sectoral directive prohibits the documented dealing">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+    <condition rel="matches listing" subject="%S" object="%L" weight="1"/>
+    <condition rel="is on sanctions list" subject="%L" object="OFAC SSI List" weight="1"/>
+    <condition rel="has documented payment purpose" subject="%S" object="%PP" weight="1"/>
+    <condition rel="has ssi prohibited purpose" subject="%L" object="%PP" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','OFAC') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'family licensed for hit','OFAC') is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="True Match - Reject and Report" cf="90" name="Reject - EU outbound payment refused under the making available prohibition">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','EU') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','EU') is greater than or equal to 1" weight="1"/>
+    <condition rel="has unlicensed bound blocking family" subject="%S" object="EU" weight="1"/>
+    <condition rel="relates to payment" subject="%S" object="%PM" weight="1"/>
+    <condition rel="is outbound payment" subject="%PM" object="%OB" weight="1"/>
+    <condition expression="%OB is equal to true" weight="1"/>
+    <condition rel="has customer relationship role" subject="%S" object="%RL" weight="1"/>
+    <condition expression="(%RL is equal to 'Payment Beneficiary') or (%RL is equal to 'Ultimate Beneficiary')" weight="1"/>
+  </relinst>
+
+  <!-- Process under licence candidate -->
+  <relinst type="has candidate outcome" object="True Match - Process Under Licence" cf="95" name="Licence - true match with every bound blocking exposure licensed">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis',*) is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'family licensed for hit',*) is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has unlicensed bound blocking family',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <!-- Refer candidates -->
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="100" name="Refer - partial corroboration must escalate never discount">
+    <condition rel="has identity assessment" subject="%S" object="Partially Corroborated"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="100" name="Refer - indeterminate identity needs information not assumption">
+    <condition rel="has identity assessment" subject="%S" object="Indeterminate"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="88" name="Refer - weak alias route disabled by policy">
+    <condition rel="has identity assessment" subject="%S" object="Weak Alias Only"/>
+    <condition rel="weak alias discount allowed" subject="Screening Policy" object="%W" weight="1"/>
+    <condition expression="%W is equal to false" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="75" name="Refer - ownership caution stands against the screened party">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has ownership caution mark" subject="%P" object="%CM"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="78" name="Refer - ownership registry data incomplete">
+    <condition rel="has ownership data completeness" subject="%S" object="Incomplete"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="75" name="Refer - OFAC policy exposure without US nexus on a confirmed target">
+    <condition rel="has policy only ofac exposure" subject="%S" object="%PO"/>
+    <condition expression="%PO is equal to true" weight="1"/>
+    <condition rel="has identity assessment" subject="%S" object="%IA" weight="1"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="75" name="Refer - OFAC policy exposure on an ownership blocked entity without US nexus">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has ofac ownership finding" subject="%P" object="%F"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','OFAC') is equal to 0" weight="1"/>
+    <condition rel="applies ofac lists as policy" subject="Screening Policy" object="%AP" weight="1"/>
+    <condition expression="%AP is equal to true" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="76" name="Refer - UN listed with transposition pending and no interim freeze policy">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+    <condition rel="has un gap exposure" subject="%S" object="%G" weight="1"/>
+    <condition expression="%G is equal to true" weight="1"/>
+    <condition rel="applies un interim freeze" subject="Screening Policy" object="%POL" weight="1"/>
+    <condition expression="%POL is equal to false" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="80" name="Refer - message integrity indicators disable discounting and demand an RFI">
+    <condition rel="has discount block" subject="%S" object="Message Integrity Indicators Present"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="78" name="Refer - eponymous entity name raises ownership questions">
+    <condition rel="has discount block" subject="%S" object="Eponymous Name Match"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="75" name="Refer - vessel IMO unverifiable or identity churn indicators">
+    <condition rel="has discount block" subject="%S" object="IMO Unverifiable"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="78" name="Refer - FAQ 403 designated minority owner participates in the transaction">
+    <condition rel="has discount block" subject="%S" object="Designated Minority Owner Is Transaction Party"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="75" name="Refer - registry evidence stale beyond the policy window">
+    <condition rel="has discount block" subject="%S" object="Registry Evidence Stale"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Refer to MLRO" cf="85" name="Refer - specified ship under Part 6 shipping prohibitions not the asset freeze">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+    <condition rel="matches listing" subject="%S" object="%L" weight="1"/>
+    <condition rel="is specified ship entry" subject="%L" object="%SP" weight="1"/>
+    <condition expression="%SP is equal to true" weight="1"/>
+  </relinst>
+
+  <!-- False positive candidates: closes are earned -->
+  <relinst type="has candidate outcome" object="Close as False Positive" cf="100" name="FP - identity resolved different with no discount blocks">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="(%IA is equal to 'Confirmed Different') or (%IA is equal to 'Probable Different')" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has discount block',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Close as False Positive" cf="100" name="FP - weak alias only hit under the FAQ 124 policy latitude">
+    <condition rel="has identity assessment" subject="%S" object="Weak Alias Only"/>
+    <condition rel="weak alias discount allowed" subject="Screening Policy" object="%W" weight="1"/>
+    <condition expression="%W is equal to true" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has discount block',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Close as False Positive" cf="88" name="FP - ownership resolved clear below every family threshold">
+    <condition rel="has ownership clear status" subject="%S" object="Clear"/>
+    <condition expression="countRelationshipInstances(%S,'has discount block',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 8 - PRECEDENCE LADDER                                      -->
+  <!-- Freeze beats Reject beats Process Under Licence beats Refer      -->
+  <!-- beats Close. Unknown can never close and never auto freezes -    -->
+  <!-- the default is Refer to MLRO with interim access restriction.    -->
+  <!-- ================================================================ -->
+
+  <relinst type="has freeze candidate" object="true" cf="100" name="Flag - freeze candidate exists">
+    <condition rel="has candidate outcome" subject="%S" object="True Match - Freeze and Report"/>
+  </relinst>
+
+  <relinst type="has reject candidate" object="true" cf="100" name="Flag - reject candidate exists">
+    <condition rel="has candidate outcome" subject="%S" object="True Match - Reject and Report"/>
+  </relinst>
+
+  <relinst type="has licence candidate" object="true" cf="100" name="Flag - licence candidate exists">
+    <condition rel="has candidate outcome" subject="%S" object="True Match - Process Under Licence"/>
+  </relinst>
+
+  <relinst type="has refer candidate" object="true" cf="100" name="Flag - refer candidate exists">
+    <condition rel="has candidate outcome" subject="%S" object="Refer to MLRO"/>
+  </relinst>
+
+  <relinst type="has adjudication outcome" object="True Match - Freeze and Report" cf="100" name="Final - freeze takes precedence">
+    <condition rel="has candidate outcome" subject="%S" object="True Match - Freeze and Report"/>
+  </relinst>
+
+  <relinst type="has adjudication outcome" object="True Match - Reject and Report" cf="100" name="Final - reject when no freeze candidate">
+    <condition expression="countRelationshipInstances(%S,'has freeze candidate',*) is equal to 0" weight="1"/>
+    <condition rel="has candidate outcome" subject="%S" object="True Match - Reject and Report"/>
+  </relinst>
+
+  <relinst type="has adjudication outcome" object="True Match - Process Under Licence" cf="100" name="Final - process under licence when no freeze or reject">
+    <condition expression="countRelationshipInstances(%S,'has freeze candidate',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has reject candidate',*) is equal to 0" weight="1"/>
+    <condition rel="has candidate outcome" subject="%S" object="True Match - Process Under Licence"/>
+  </relinst>
+
+  <relinst type="has adjudication outcome" object="Refer to MLRO" cf="100" name="Final - refer when no true match action">
+    <condition expression="countRelationshipInstances(%S,'has freeze candidate',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has reject candidate',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has licence candidate',*) is equal to 0" weight="1"/>
+    <condition rel="has candidate outcome" subject="%S" object="Refer to MLRO"/>
+  </relinst>
+
+  <relinst type="has adjudication outcome" object="Close as False Positive" cf="100" name="Final - close only when nothing outranks it">
+    <condition expression="countRelationshipInstances(%S,'has freeze candidate',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has reject candidate',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has licence candidate',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has refer candidate',*) is equal to 0" weight="1"/>
+    <condition rel="has candidate outcome" subject="%S" object="Close as False Positive"/>
+  </relinst>
+
+  <relinst type="has adjudication outcome" object="Refer to MLRO" cf="65" name="Final - default referral when nothing resolves">
+    <condition expression="countRelationshipInstances(%S,'has freeze candidate',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has reject candidate',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has licence candidate',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has refer candidate',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has candidate outcome',*) is equal to 0" alt="No candidate outcome could be derived from the available data"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 9 - CONTRIBUTING EVIDENCE                                  -->
+  <!-- Evidence binds the derived facts themselves so it can never      -->
+  <!-- drift from the rules it describes.                               -->
+  <!-- ================================================================ -->
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - match profile">
+    <condition rel="has match score" subject="%S" object="%SC"/>
+    <condition rel="has match type" subject="%S" object="%MT" weight="1"/>
+    <condition rel="has matched name quality" subject="%S" object="%Q" weight="1"/>
+    <condition rel="has name match strength" subject="%S" object="%ST" weight="1"/>
+    <condition expression="'Screening match: score ' + %SC + ', type ' + %MT + ', matched name quality ' + %Q + ', assessed name strength ' + %ST" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - identity assessment with factor tallies">
+    <condition rel="has identity assessment" subject="%S" object="%IA"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive corroborator',*)" value="%DC" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has partial corroborator',*)" value="%PC" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has strong differentiator',*)" value="%SD" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has weak differentiator',*)" value="%WD" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has decisive differentiator',*)" value="%DD" weight="1"/>
+    <condition expression="'Identity assessment ' + %IA + ': decisive corroborators ' + %DC + ', partial corroborators ' + %PC + ', strong differentiators ' + %SD + ', weak differentiators ' + %WD + ', decisive differentiators ' + %DD" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - each corroborating identifier">
+    <condition rel="has partial corroborator" subject="%S" object="%F"/>
+    <condition expression="'Corroborating identifier: ' + %F" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - each decisive corroborator">
+    <condition rel="has decisive corroborator" subject="%S" object="%F"/>
+    <condition expression="'Decisive unique identifier match: ' + %F" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - each differentiating identifier">
+    <condition rel="has strong differentiator" subject="%S" object="%F"/>
+    <condition expression="'Strong differentiating identifier: ' + %F" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - each weak differentiator">
+    <condition rel="has weak differentiator" subject="%S" object="%F"/>
+    <condition expression="'Supporting differentiator only, never sufficient alone: ' + %F" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - each decisive differentiator">
+    <condition rel="has decisive differentiator" subject="%S" object="%F"/>
+    <condition expression="'Decisive differentiator: ' + %F" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - DOB elimination arithmetic">
+    <condition rel="has dob comparison" subject="%S" object="Beyond Tolerance"/>
+    <condition rel="has minimum dob gap years" subject="%S" object="%M" weight="1"/>
+    <condition rel="has dob tolerance years" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="'DOB differs from every listed date of birth by at least ' + %M + ' years against a tolerance of ' + %T + ' - comparable set complete'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - weak alias basis for the hit">
+    <condition rel="has identity assessment" subject="%S" object="Weak Alias Only"/>
+    <condition expression="'Hit rests solely on a low quality alias with no comparable identifiers either way - OFAC FAQ 124 latitude applies under documented policy'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - OFAC ownership aggregation level 1">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has ofac aggregate percent level 1" subject="%P" object="%A"/>
+    <condition rel="has aggregate blocking threshold percent" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="'OFAC 50 percent rule: aggregate direct SDN ownership of the screened entity is ' + %A + ' percent against the ' + %T + ' percent threshold - FAQ 401 aggregation'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - OFAC ownership cascade level 2">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has ofac aggregate percent level 2" subject="%P" object="%A"/>
+    <condition expression="countRelationshipInstances(%P,'has ofac blocked stake percent level 1',*) is equal to 0" weight="1"/>
+    <condition expression="'OFAC 50 percent rule chain: ' + %A + ' percent of the screened entity is held by owners who are themselves blocked - a blocked intermediate counts in full per FAQ 402'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - UK designated ownership arithmetic">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has uk designated aggregate percent" subject="%P" object="%A"/>
+    <condition expression="countRelationshipInstances(%P,'has uk designated holder',*)" value="%N" weight="1"/>
+    <condition expression="'UK reg 7 analysis: ' + %N + ' designated holders with combined stake ' + %A + ' percent - the UK ownership limb requires a single holder strictly above 50 percent and does not aggregate independent stakes'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - UK ownership finding">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has uk ownership finding" subject="%P" object="%F"/>
+    <condition expression="'UK reg 7 finding: the screened entity is ' + %F + ' by a designated person through majority stake, control indicators or a Schedule 1 joint arrangement chain'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - EU ownership finding">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has eu ownership finding" subject="%P" object="%F"/>
+    <condition rel="has eu aggregate percent level 1" subject="%P" object="%A" weight="1" behaviour="optional"/>
+    <condition expression="'EU Best Practices finding: the screened entity is ' + %F + ' - aggregate listed person ownership meets the 50 percent or more test regardless of concert'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - each ownership caution">
+    <condition rel="concerns party" subject="%S" object="%P"/>
+    <condition rel="has ownership caution mark" subject="%P" object="%CM"/>
+    <condition rel="has ownership caution floor percent" subject="Screening Policy" object="%F" weight="1"/>
+    <condition expression="'Ownership caution: ' + %CM + ' - sub threshold or unresolved designated interest at or above the ' + %F + ' percent caution floor refers and never clears'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - each bound regime family">
+    <condition rel="regime family binds hit" subject="%S" object="%RF"/>
+    <condition expression="'Regime nexus: ' + %RF + ' binds this hit'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - each designation basis">
+    <condition rel="has target designation basis" subject="%S" object="%RF"/>
+    <condition expression="'Designation basis: ' + %RF" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - OFAC policy exposure without legal nexus">
+    <condition rel="has policy only ofac exposure" subject="%S" object="%PO"/>
+    <condition expression="%PO is equal to true" weight="1"/>
+    <condition expression="'OFAC designation with no US nexus: no statutory blocking duty - group policy applies OFAC lists so the exposure routes to MLRO for a risk decision'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - UN transposition gap">
+    <condition rel="has un gap exposure" subject="%S" object="%G"/>
+    <condition expression="%G is equal to true" weight="1"/>
+    <condition expression="'UN listed with domestic transposition pending in the bound jurisdiction - FATF R.6 expects freezing without delay, ideally within hours'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - each licensed family">
+    <condition rel="family licensed for hit" subject="%S" object="%RF"/>
+    <condition rel="has ofsi licence on file" subject="%S" object="%LIC" weight="1" behaviour="optional"/>
+    <condition expression="'Licence check: the ' + %RF + ' exposure is covered by a licence in force on the payment date with ground matching the documented purpose, conditions met and caps not exceeded'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - each unlicensed bound blocking exposure">
+    <condition rel="has unlicensed bound blocking family" subject="%S" object="%RF"/>
+    <condition expression="'Unlicensed exposure: the ' + %RF + ' designation basis is bound and no licence of that authority covers it - a licence from another authority never transfers'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - each payment integrity indicator">
+    <condition rel="has integrity indicator" subject="%S" object="%I"/>
+    <condition expression="'Payment integrity indicator: ' + %I + ' - message based discounting is disabled per Wolfsberg Payment Transparency Standards and FATF R.16'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - each discount block">
+    <condition rel="has discount block" subject="%S" object="%B"/>
+    <condition expression="'Discount hard block: ' + %B" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - EU delisting does not affect UK status">
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="was removed from eu list" subject="%L" object="%RM"/>
+    <condition expression="%RM is equal to true" weight="1"/>
+    <condition rel="is on sanctions list" subject="%L" object="UK Sanctions List" weight="1"/>
+    <condition expression="'List authority check: the target was removed from the EU list but remains on the UK Sanctions List - EU delisting never clears UK status, verify against the binding list'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - deceased listing binds the estate">
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="listing marked deceased" subject="%L" object="%D"/>
+    <condition expression="%D is equal to true" weight="1"/>
+    <condition rel="has identity assessment" subject="%S" object="%IA" weight="1"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+    <condition expression="'The listing is marked deceased: death is not delisting, the freeze binds the estate, and death is never a discount factor'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - specified ship prohibitions">
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="is specified ship entry" subject="%L" object="%SP"/>
+    <condition expression="%SP is equal to true" weight="1"/>
+    <condition expression="'Specified ship: Part 6 shipping prohibitions apply - transport, port entry and insurance restrictions with the Interdiction general licence to check - not the reg 11 asset freeze'" value="%O"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 10 - RATIONALE, NEXT STEPS, REPORTING AND REVIEW           -->
+  <!-- Rationale and next step rules bind the final outcome fact so     -->
+  <!-- they can never fire for an outcome that did not.                 -->
+  <!-- Reporting obligations accrue per bound family, independent of    -->
+  <!-- which candidate won the ladder.                                  -->
+  <!-- ================================================================ -->
+
+  <relinst type="has adjudication rationale" cf="100" name="Rationale - freeze">
+    <condition rel="has adjudication outcome" subject="%S" object="True Match - Freeze and Report"/>
+    <condition expression="'True match against an asset freeze designation with binding nexus and no applicable licence. Freezing is required on knowledge or reasonable cause to suspect - Russia Regs reg 11, EU Reg 269/2014 Art 2, OFAC blocking with the 50 percent rule where ownership derived, FATF R.6 without delay. Funds are held, never returned - return would itself make funds available'" value="%O"/>
+  </relinst>
+
+  <relinst type="has adjudication rationale" cf="100" name="Rationale - reject">
+    <condition rel="has adjudication outcome" subject="%S" object="True Match - Reject and Report"/>
+    <condition expression="'True match on a payment the institution must refuse: making funds available to a designated party or its owned entity - reg 12, EU Art 2 paragraph 2 - processing via a reg 17A designated bank, or an OFAC sectoral directive prohibiting the documented dealing. No blockable property interest is held so the payment is rejected and reported'" value="%O"/>
+  </relinst>
+
+  <relinst type="has adjudication rationale" cf="100" name="Rationale - process under licence">
+    <condition rel="has adjudication outcome" subject="%S" object="True Match - Process Under Licence"/>
+    <condition expression="'True match but every bound blocking exposure is covered by a licence in force on the payment date whose ground matches the documented purpose. Process strictly within the licence terms: conditions, caps across the designated person group, usage reporting windows and six year UK record keeping. A licence from one authority never licenses another authority exposure'" value="%O"/>
+  </relinst>
+
+  <relinst type="has adjudication rationale" cf="100" name="Rationale - refer">
+    <condition rel="has adjudication outcome" subject="%S" object="Refer to MLRO"/>
+    <condition expression="'The hit cannot be safely discounted or safely actioned on the available evidence: partial corroboration, unresolved ownership or control questions, policy only exposure, licence doubt or message integrity indicators. Strict civil liability means processing while investigating is never safe - restrict access now per the Wise lesson and refer to the MLRO with the unresolved points named'" value="%O"/>
+  </relinst>
+
+  <relinst type="has adjudication rationale" cf="100" name="Rationale - false positive">
+    <condition rel="has adjudication outcome" subject="%S" object="Close as False Positive"/>
+    <condition expression="'The screened party is affirmatively differentiated from the listed target: at least two independent mismatching identifiers or one decisive identifier against every listed value, or the hit rests solely on a low quality alias, or ownership resolved clear below every family threshold on complete fresh registry evidence. Documented per OFSI name match guidance, OFAC FAQ 5 and FATF criterion 6.6 false positive release'" value="%O"/>
+  </relinst>
+
+  <relinst type="has recommended next step" cf="100" name="Next step - freeze standard">
+    <condition rel="has adjudication outcome" subject="%S" object="True Match - Freeze and Report"/>
+    <condition rel="relates to payment" subject="%S" object="%PM" weight="1" behaviour="optional"/>
+    <condition expression="countRelationshipInstances(%S,'has integrity indicator',*)" value="%NI" weight="1"/>
+    <condition expression="'Freeze all funds and economic resources immediately and restrict account access. Do not return any in flight funds. Report to every bound authority on its own clock, obtain MLRO sign off, archive the evidence tree and diarise the annual frozen asset reviews'" value="%O"/>
+  </relinst>
+
+  <relinst type="has recommended next step" cf="100" name="Next step - reject">
+    <condition rel="has adjudication outcome" subject="%S" object="True Match - Reject and Report"/>
+    <condition expression="'Refuse the payment and do not execute. File the reject reports on each bound authority clock, record the refusal rationale, apply interim restrictions to the customer relationship pending MLRO review and consider the SAR question separately'" value="%O"/>
+  </relinst>
+
+  <relinst type="has recommended next step" cf="100" name="Next step - process under licence">
+    <condition rel="has adjudication outcome" subject="%S" object="True Match - Process Under Licence"/>
+    <condition expression="'Release strictly within the licence terms. Record the licence reference against the payment, complete the licence usage report inside its window, keep records six years for UK licences and ten for OFAC, and re verify licence validity before any further payment'" value="%O"/>
+  </relinst>
+
+  <relinst type="has recommended next step" cf="100" name="Next step - refer">
+    <condition rel="has adjudication outcome" subject="%S" object="Refer to MLRO"/>
+    <condition expression="'Suspend the activity and restrict access pending decision. Assemble the referral pack naming each unresolved point, raise any correspondent RFI for missing payment fields, and route to the MLRO or sanctions officer - only that role decides freeze, reject or release'" value="%O"/>
+  </relinst>
+
+  <relinst type="has recommended next step" cf="100" name="Next step - false positive">
+    <condition rel="has adjudication outcome" subject="%S" object="Close as False Positive"/>
+    <condition expression="'Close with the field by field comparison recorded: every listed identifier against every customer value with the elimination logic invoked. Retain the rationale, apply any required second review, and note the discount does not carry over if the list entry later changes'" value="%O"/>
+  </relinst>
+
+  <!-- Reporting obligations accrue per bound family -->
+  <relinst type="has reporting obligation" object="Report to OFSI as soon as practicable with reg 70 data" cf="100" name="Reporting - UK bound true match reports to OFSI">
+    <condition rel="has adjudication outcome" subject="%S" object="%OC"/>
+    <condition expression="(%OC is equal to 'True Match - Freeze and Report') or (%OC is equal to 'True Match - Reject and Report') or (%OC is equal to 'True Match - Process Under Licence')" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','UK') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','UK') is greater than or equal to 1" weight="1"/>
+  </relinst>
+
+  <relinst type="has reporting obligation" object="File ORS blocked property report within 10 business days" cf="100" name="Reporting - OFAC nexus freeze files the ORS blocking report">
+    <condition rel="has adjudication outcome" subject="%S" object="True Match - Freeze and Report"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','OFAC') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','OFAC') is greater than or equal to 1" weight="1"/>
+  </relinst>
+
+  <relinst type="has reporting obligation" object="File ORS reject report within 10 business days" cf="100" name="Reporting - OFAC nexus reject files the ORS reject report">
+    <condition rel="has adjudication outcome" subject="%S" object="True Match - Reject and Report"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','OFAC') is greater than or equal to 1" weight="1"/>
+  </relinst>
+
+  <relinst type="has reporting obligation" object="Report immediately to EU NCA and Commission under Art 8" cf="100" name="Reporting - EU bound true match reports to the NCA">
+    <condition rel="has adjudication outcome" subject="%S" object="%OC"/>
+    <condition expression="(%OC is equal to 'True Match - Freeze and Report') or (%OC is equal to 'True Match - Reject and Report') or (%OC is equal to 'True Match - Process Under Licence')" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','EU') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','EU') is greater than or equal to 1" weight="1"/>
+  </relinst>
+
+  <relinst type="has reporting obligation" object="Report interim freeze to the competent authority pending UN transposition" cf="100" name="Reporting - UN gap interim freeze reports to the competent authority per FATF R.6">
+    <condition rel="has adjudication outcome" subject="%S" object="True Match - Freeze and Report"/>
+    <condition rel="has un gap exposure" subject="%S" object="%G" weight="1"/>
+    <condition expression="%G is equal to true" weight="1"/>
+  </relinst>
+
+  <relinst type="has reporting obligation" object="Annual OFSI frozen asset review applies" cf="100" name="Reporting - UK freeze joins the annual frozen asset review">
+    <condition rel="has adjudication outcome" subject="%S" object="True Match - Freeze and Report"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','UK') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','UK') is greater than or equal to 1" weight="1"/>
+  </relinst>
+
+  <relinst type="has reporting obligation" object="OFAC annual blocked property report applies" cf="100" name="Reporting - OFAC block joins the annual blocked property report">
+    <condition rel="has adjudication outcome" subject="%S" object="True Match - Freeze and Report"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','OFAC') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','OFAC') is greater than or equal to 1" weight="1"/>
+  </relinst>
+
+  <relinst type="has reporting obligation" object="OFSI general licence usage report due per licence terms" cf="100" name="Reporting - licence usage report within the licence window">
+    <condition rel="has adjudication outcome" subject="%S" object="True Match - Process Under Licence"/>
+    <condition rel="family licensed for hit" subject="%S" object="UK" weight="1"/>
+  </relinst>
+
+  <!-- Review routing -->
+  <relinst type="has review requirement" object="MLRO Sign Off Required" cf="100" name="Review - every true match and referral is an MLRO level act">
+    <condition rel="has adjudication outcome" subject="%S" object="%OC"/>
+    <condition expression="%OC is not equal to 'Close as False Positive'" weight="1"/>
+  </relinst>
+
+  <relinst type="has review requirement" object="Interim Access Restriction" cf="100" name="Review - restrict access from the moment of a credible unresolved alert">
+    <condition rel="has adjudication outcome" subject="%S" object="Refer to MLRO"/>
+  </relinst>
+
+  <relinst type="has review requirement" object="Four Eyes Review Required" cf="100" name="Review - four eyes on high score discounts">
+    <condition rel="has adjudication outcome" subject="%S" object="Close as False Positive"/>
+    <condition rel="has match score" subject="%S" object="%SC" weight="1"/>
+    <condition rel="has four eyes score threshold" subject="Screening Policy" object="%T" weight="1"/>
+    <condition expression="%SC is greater than or equal to %T" weight="1"/>
+  </relinst>
+
+  <relinst type="has review requirement" object="QA Sample Weak Alias Close" cf="100" name="Review - weak alias closes join the QA sample">
+    <condition rel="has adjudication outcome" subject="%S" object="Close as False Positive"/>
+    <condition rel="has identity assessment" subject="%S" object="Weak Alias Only" weight="1"/>
+  </relinst>
+
+  <relinst type="has review requirement" object="EU Pre Listing Lookback Review" cf="100" name="Review - EU true match triggers the two week pre listing lookback">
+    <condition rel="has adjudication outcome" subject="%S" object="%OC"/>
+    <condition expression="(%OC is equal to 'True Match - Freeze and Report') or (%OC is equal to 'True Match - Reject and Report')" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has target designation basis','EU') is greater than or equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'regime family binds hit','EU') is greater than or equal to 1" weight="1"/>
+  </relinst>
+
+  <relinst type="has review requirement" object="Reportedly Deceased Referral Flag" cf="100" name="Review - deceased listing flag rides on any true match">
+    <condition rel="matches listing" subject="%S" object="%L"/>
+    <condition rel="listing marked deceased" subject="%L" object="%D"/>
+    <condition expression="%D is equal to true" weight="1"/>
+    <condition rel="has identity assessment" subject="%S" object="%IA" weight="1"/>
+    <condition expression="(%IA is equal to 'Confirmed Same') or (%IA is equal to 'Probable Same')" weight="1"/>
+  </relinst>
+</rbl:kb>

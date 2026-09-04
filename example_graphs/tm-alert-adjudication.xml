@@ -1,0 +1,1578 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rbl:kb xmlns:rbl="http://rbl.io/schema/RBLang">
+
+  <!-- ================================================================ -->
+  <!-- UK Transaction Monitoring Alert Adjudication                     -->
+  <!-- Generic demo and reusable blueprint. No real institution.        -->
+  <!-- Decides per alert: Close as False Positive, Request Information, -->
+  <!-- Escalate to Investigation, or Recommend SAR - with certainty,    -->
+  <!-- contributing evidence and a written rationale.                   -->
+  <!-- Layers: transaction feature derivation, typology sub-models      -->
+  <!-- (graded strong/moderate), customer risk context scoring,         -->
+  <!-- defeaters with a suppression map, candidate outcomes, and a      -->
+  <!-- precedence ladder guaranteeing exactly one final outcome.        -->
+  <!-- Regulatory grounding: MLR 2017 reg 28(11) and reg 33 scrutiny    -->
+  <!-- and EDD duties, POCA 2002 s.330 suspicion standard (R v Da       -->
+  <!-- Silva: more than fanciful), s.333A tipping off constraint on     -->
+  <!-- customer enquiries, JMLSG Part I unusual-vs-suspicious           -->
+  <!-- distinction, FCA FCG documented-rationale expectations.          -->
+  <!-- Operational thresholds live as facts on the TM Policy instance   -->
+  <!-- so they can be recalibrated without touching rules.              -->
+  <!-- ================================================================ -->
+
+  <!-- ============================ Concepts ========================== -->
+  <concept name="Alert" type="string"/>
+  <concept name="Customer" type="string"/>
+  <concept name="Transaction" type="string"/>
+  <concept name="Counterparty" type="string"/>
+  <concept name="Jurisdiction" type="string"/>
+  <concept name="Channel" type="string"/>
+  <concept name="Direction" type="string"/>
+  <concept name="Outcome" type="string"/>
+  <concept name="Typology" type="string"/>
+  <concept name="Explanation" type="string"/>
+  <concept name="Risk Tier" type="string"/>
+  <concept name="Risk Rating" type="string"/>
+  <concept name="Customer Type" type="string"/>
+  <concept name="Media Relevance" type="string"/>
+  <concept name="Media Credibility" type="string"/>
+  <concept name="Jurisdiction Risk" type="string"/>
+  <concept name="Policy" type="string"/>
+  <concept name="Evidence" type="string"/>
+  <concept name="Rationale" type="string"/>
+  <concept name="Next Step" type="string"/>
+  <concept name="Risk Factor" type="string"/>
+  <concept name="Alert Type" type="string"/>
+  <concept name="Activity Description" type="string"/>
+  <concept name="Control Reason" type="string"/>
+  <concept name="Review Requirement" type="string"/>
+  <concept name="Alert Source" type="string"/>
+  <concept name="Amount" type="number"/>
+  <concept name="Count" type="number"/>
+  <concept name="Ratio" type="number"/>
+  <concept name="Day Count" type="number"/>
+  <concept name="Month Count" type="number"/>
+  <concept name="Score" type="number"/>
+  <concept name="Percent" type="number"/>
+  <concept name="Month Number" type="number"/>
+  <concept name="Txn Date" type="date"/>
+  <concept name="Flag" type="truth"/>
+
+  <!-- ======================= Relationships ========================== -->
+
+  <!-- Link layer: injected by the alert intake datasource -->
+  <rel name="concerns customer" subject="Alert" object="Customer" askable="secondFormObject" allowUnknown="true" canAdd="all">
+    <secondFormObject>Which customer does alert %S concern?</secondFormObject>
+  </rel>
+  <rel name="has alert type" subject="Alert" object="Alert Type" askable="none" canAdd="all"/>
+  <rel name="has alert source" subject="Alert" object="Alert Source" askable="none"/>
+  <rel name="has alerted transaction" subject="Alert" object="Transaction" plural="true" askable="none" canAdd="all"/>
+  <rel name="has documented explanation type" subject="Alert" object="Explanation" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>What documented explanation is on file for the activity in alert %S?</secondFormObject>
+  </rel>
+  <rel name="has inbound fraud report match" subject="Alert" object="Flag" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Has any inbound credit in alert %S been matched to an interbank fraud report or recall request?</secondFormObject>
+  </rel>
+  <rel name="has unresolved sanctions match" subject="Alert" object="Flag" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Is there an unresolved sanctions name match on any party to alert %S?</secondFormObject>
+  </rel>
+
+  <!-- Transaction data: injected by the transaction datasource, never asked -->
+  <rel name="has txn amount" subject="Transaction" object="Amount" askable="none"/>
+  <rel name="has txn direction" subject="Transaction" object="Direction" askable="none"/>
+  <rel name="has txn channel" subject="Transaction" object="Channel" askable="none"/>
+  <rel name="has txn counterparty" subject="Transaction" object="Counterparty" askable="none" canAdd="all"/>
+  <rel name="has txn jurisdiction" subject="Transaction" object="Jurisdiction" askable="none" canAdd="all"/>
+  <rel name="has txn date" subject="Transaction" object="Txn Date" askable="none"/>
+
+  <!-- Customer context: injected by the KYC datasource, askable for interactive runs -->
+  <rel name="has customer type" subject="Customer" object="Customer Type" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Is %S a Personal, Business or Corporate customer?</secondFormObject>
+  </rel>
+  <rel name="has risk rating" subject="Customer" object="Risk Rating" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>What is the onboarding risk rating of %S?</secondFormObject>
+  </rel>
+  <rel name="is politically exposed" subject="Customer" object="Flag" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Is %S a politically exposed person?</secondFormObject>
+  </rel>
+  <rel name="has adverse media relevance" subject="Customer" object="Media Relevance" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>What is the most serious adverse media relevance category for %S?</secondFormObject>
+  </rel>
+  <rel name="has adverse media credibility" subject="Customer" object="Media Credibility" askable="none"/>
+  <rel name="has adverse media age months" subject="Customer" object="Month Count" askable="none"/>
+  <rel name="has months since kyc refresh" subject="Customer" object="Month Count" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>How many months since the KYC profile of %S was last refreshed?</secondFormObject>
+  </rel>
+  <rel name="has expected monthly turnover" subject="Customer" object="Amount" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>What is the expected monthly account turnover in GBP for %S?</secondFormObject>
+  </rel>
+  <rel name="has account age months" subject="Customer" object="Month Count" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>How many months has the account of %S been open?</secondFormObject>
+  </rel>
+  <rel name="was dormant before review period" subject="Customer" object="Flag" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Was the account of %S dormant before the review period?</secondFormObject>
+  </rel>
+  <rel name="has prior alert count" subject="Customer" object="Count" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>How many prior monitoring alerts has %S had in the last 12 months?</secondFormObject>
+  </rel>
+  <rel name="has prior sar filed" subject="Customer" object="Flag" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Has a SAR previously been filed on %S?</secondFormObject>
+  </rel>
+  <rel name="has fraud database marker" subject="Customer" object="Flag" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>Does %S carry a Cifas or National Fraud Database marker?</secondFormObject>
+  </rel>
+  <rel name="has expected counterparty" subject="Customer" object="Counterparty" plural="true" askable="none" canAdd="all"/>
+  <rel name="has salary payer" subject="Customer" object="Counterparty" askable="secondFormObject" allowUnknown="true" canAdd="all">
+    <secondFormObject>Who is the declared salary payer of %S?</secondFormObject>
+  </rel>
+  <rel name="has typical salary amount" subject="Customer" object="Amount" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>What is the typical monthly salary credit in GBP for %S?</secondFormObject>
+  </rel>
+  <rel name="has declared cash intensity percent" subject="Customer" object="Percent" askable="secondFormObject" allowUnknown="true">
+    <secondFormObject>What percentage of turnover for %S is declared as cash?</secondFormObject>
+  </rel>
+  <rel name="has declared seasonal peak month" subject="Customer" object="Month Number" plural="true" askable="none"/>
+  <rel name="has declared activity description" subject="Customer" object="Activity Description" askable="secondFormObject" allowUnknown="true" canAdd="all">
+    <secondFormObject>What is the declared occupation or nature of business of %S?</secondFormObject>
+  </rel>
+
+  <!-- Reference data: jurisdiction risk and policy parameters -->
+  <rel name="has jurisdiction risk level" subject="Jurisdiction" object="Jurisdiction Risk" askable="none"/>
+  <rel name="has near threshold lower bound" subject="Policy" object="Amount" askable="none"/>
+  <rel name="has cash alert threshold" subject="Policy" object="Amount" askable="none"/>
+  <rel name="has structuring strong count" subject="Policy" object="Count" askable="none"/>
+  <rel name="has structuring moderate count" subject="Policy" object="Count" askable="none"/>
+  <rel name="has structuring strong window days" subject="Policy" object="Day Count" askable="none"/>
+  <rel name="has structuring window days" subject="Policy" object="Day Count" askable="none"/>
+  <rel name="has pass through ratio" subject="Policy" object="Ratio" askable="none"/>
+  <rel name="has pass through window days" subject="Policy" object="Day Count" askable="none"/>
+  <rel name="has strong pass through ratio" subject="Policy" object="Ratio" askable="none"/>
+  <rel name="has strong pass through window days" subject="Policy" object="Day Count" askable="none"/>
+  <rel name="has material inflow floor" subject="Policy" object="Amount" askable="none"/>
+  <rel name="has mule inflow floor" subject="Policy" object="Amount" askable="none"/>
+  <rel name="has mule payer count" subject="Policy" object="Count" askable="none"/>
+  <rel name="has new account age months" subject="Policy" object="Month Count" askable="none"/>
+  <rel name="has mismatch multiple" subject="Policy" object="Ratio" askable="none"/>
+  <rel name="has strong mismatch multiple" subject="Policy" object="Ratio" askable="none"/>
+  <rel name="has seasonal allowance multiple" subject="Policy" object="Ratio" askable="none"/>
+  <rel name="has known coverage share" subject="Policy" object="Ratio" askable="none"/>
+  <rel name="has round amount share" subject="Policy" object="Ratio" askable="none"/>
+  <rel name="has round wire minimum count" subject="Policy" object="Count" askable="none"/>
+  <rel name="has cash intensity margin percent" subject="Policy" object="Percent" askable="none"/>
+  <rel name="has salary band percent" subject="Policy" object="Percent" askable="none"/>
+  <rel name="has stale kyc months" subject="Policy" object="Month Count" askable="none"/>
+  <rel name="has closure kyc limit months" subject="Policy" object="Month Count" askable="none"/>
+  <rel name="has seasonal precedent months" subject="Policy" object="Month Count" askable="none"/>
+  <rel name="has enhanced monitoring txn minimum" subject="Policy" object="Count" askable="none"/>
+
+  <!-- Derived transaction features, all inferred, never asked -->
+  <rel name="has inbound txn" subject="Alert" object="Transaction" plural="true" askable="none"/>
+  <rel name="has outbound txn" subject="Alert" object="Transaction" plural="true" askable="none"/>
+  <rel name="has cash deposit txn" subject="Alert" object="Transaction" plural="true" askable="none"/>
+  <rel name="has inbound value item" subject="Alert" object="Amount" plural="true" askable="none"/>
+  <rel name="has outbound value item" subject="Alert" object="Amount" plural="true" askable="none"/>
+  <rel name="has cash deposit value item" subject="Alert" object="Amount" plural="true" askable="none"/>
+  <rel name="has known counterparty value item" subject="Alert" object="Amount" plural="true" askable="none"/>
+  <rel name="has total inbound value" subject="Alert" object="Amount" askable="none"/>
+  <rel name="has total outbound value" subject="Alert" object="Amount" askable="none"/>
+  <rel name="has total cash deposit value" subject="Alert" object="Amount" askable="none"/>
+  <rel name="has total known counterparty value" subject="Alert" object="Amount" askable="none"/>
+  <rel name="has near threshold cash txn" subject="Alert" object="Transaction" plural="true" askable="none"/>
+  <rel name="has near threshold cash count" subject="Alert" object="Count" askable="none"/>
+  <rel name="has near threshold date entry" subject="Alert" object="Txn Date" plural="true" askable="none"/>
+  <rel name="has first near threshold date" subject="Alert" object="Txn Date" askable="none"/>
+  <rel name="has last near threshold date" subject="Alert" object="Txn Date" askable="none"/>
+  <rel name="has near threshold span days" subject="Alert" object="Day Count" askable="none"/>
+  <rel name="has activity date entry" subject="Alert" object="Txn Date" plural="true" askable="none"/>
+  <rel name="has known counterparty txn" subject="Alert" object="Transaction" plural="true" askable="none"/>
+  <rel name="has inbound date entry" subject="Alert" object="Txn Date" plural="true" askable="none"/>
+  <rel name="has outbound date entry" subject="Alert" object="Txn Date" plural="true" askable="none"/>
+  <rel name="has first inbound date" subject="Alert" object="Txn Date" askable="none"/>
+  <rel name="has last outbound date" subject="Alert" object="Txn Date" askable="none"/>
+  <rel name="has last activity date" subject="Alert" object="Txn Date" askable="none"/>
+  <rel name="has pass through days" subject="Alert" object="Day Count" askable="none"/>
+  <rel name="has outflow ratio" subject="Alert" object="Ratio" askable="none"/>
+  <rel name="has known coverage ratio" subject="Alert" object="Ratio" askable="none"/>
+  <rel name="has cash inflow percent" subject="Alert" object="Percent" askable="none"/>
+  <rel name="has expected turnover multiple" subject="Alert" object="Ratio" askable="none"/>
+  <rel name="has third party payer" subject="Alert" object="Counterparty" plural="true" askable="none"/>
+  <rel name="has third party payer count" subject="Alert" object="Count" askable="none"/>
+  <rel name="has outbound wire txn" subject="Alert" object="Transaction" plural="true" askable="none"/>
+  <rel name="has round outbound wire txn" subject="Alert" object="Transaction" plural="true" askable="none"/>
+  <rel name="has new overseas counterparty txn" subject="Alert" object="Transaction" plural="true" askable="none"/>
+  <rel name="has call for action txn" subject="Alert" object="Transaction" plural="true" askable="none"/>
+  <rel name="has enhanced monitoring txn" subject="Alert" object="Transaction" plural="true" askable="none"/>
+  <rel name="has salary credit txn" subject="Alert" object="Transaction" plural="true" askable="none"/>
+  <rel name="has salary credit value item" subject="Alert" object="Amount" plural="true" askable="none"/>
+
+  <!-- Customer risk context layer -->
+  <rel name="has context risk factor" subject="Customer" object="Risk Factor" plural="true" askable="none"/>
+  <rel name="has context risk points" subject="Customer" object="Score" plural="true" askable="none"/>
+  <rel name="has context risk score" subject="Customer" object="Score" askable="none"/>
+  <rel name="has customer risk tier" subject="Customer" object="Risk Tier" askable="none"/>
+  <rel name="factor carries points" subject="Risk Factor" object="Score" askable="none"/>
+  <rel name="has credible financial crime media" subject="Customer" object="Flag" askable="none"/>
+  <rel name="is new or reactivated account" subject="Customer" object="Flag" askable="none"/>
+
+  <!-- Control layer: conditions that preclude closure or void defeaters -->
+  <rel name="has closure block" subject="Alert" object="Control Reason" plural="true" askable="none"/>
+  <rel name="has defeater override" subject="Alert" object="Control Reason" plural="true" askable="none"/>
+
+  <!-- Typology signal layer -->
+  <rel name="has strong typology signal" subject="Alert" object="Typology" plural="true" askable="none"/>
+  <rel name="has moderate typology signal" subject="Alert" object="Typology" plural="true" askable="none"/>
+  <rel name="has benign explanation" subject="Alert" object="Explanation" plural="true" askable="none"/>
+  <rel name="explanation suppresses typology" subject="Explanation" object="Typology" plural="true" askable="none"/>
+  <rel name="is documented explanation type" subject="Explanation" object="Flag" askable="none"/>
+  <rel name="is directly reportable typology" subject="Typology" object="Flag" askable="none"/>
+  <rel name="has suppressed typology" subject="Alert" object="Typology" plural="true" askable="none"/>
+  <rel name="has net strong typology" subject="Alert" object="Typology" plural="true" askable="none"/>
+  <rel name="has net moderate typology" subject="Alert" object="Typology" plural="true" askable="none"/>
+  <rel name="exhibits typology" subject="Alert" object="Typology" plural="true" askable="none"/>
+
+  <!-- Outcome layer -->
+  <rel name="has candidate outcome" subject="Alert" object="Outcome" plural="true" askable="none"/>
+  <rel name="has sar candidate" subject="Alert" object="Flag" askable="none"/>
+  <rel name="has escalate candidate" subject="Alert" object="Flag" askable="none"/>
+  <rel name="has rfi candidate" subject="Alert" object="Flag" askable="none"/>
+  <rel name="has close candidate" subject="Alert" object="Flag" askable="none"/>
+  <rel name="has adjudication outcome" subject="Alert" object="Outcome" askable="none"/>
+  <rel name="has contributing evidence" subject="Alert" object="Evidence" plural="true" askable="none"/>
+  <rel name="has adjudication rationale" subject="Alert" object="Rationale" askable="none"/>
+  <rel name="has recommended next step" subject="Alert" object="Next Step" askable="none"/>
+  <rel name="has review requirement" subject="Alert" object="Review Requirement" plural="true" askable="none"/>
+
+  <!-- ======================= Concept instances ======================= -->
+
+  <!-- Outcomes -->
+  <concinst name="Close as False Positive" type="Outcome"/>
+  <concinst name="Request Information" type="Outcome"/>
+  <concinst name="Escalate to Investigation" type="Outcome"/>
+  <concinst name="Recommend SAR" type="Outcome"/>
+
+  <!-- Typologies -->
+  <concinst name="Structuring" type="Typology"/>
+  <concinst name="Rapid Movement" type="Typology"/>
+  <concinst name="Money Mule Pattern" type="Typology"/>
+  <concinst name="Expected Activity Mismatch" type="Typology"/>
+  <concinst name="High Risk Jurisdiction Exposure" type="Typology"/>
+  <concinst name="Cash Intensity Anomaly" type="Typology"/>
+  <concinst name="Round Amount Corporate Flows" type="Typology"/>
+
+  <!-- Benign explanations and documented explanation types -->
+  <concinst name="Salary Pattern" type="Explanation"/>
+  <concinst name="Known Counterparty Coverage" type="Explanation"/>
+  <concinst name="Declared Seasonal Trade" type="Explanation"/>
+  <concinst name="Documented Property Sale" type="Explanation"/>
+  <concinst name="Documented Loan Drawdown" type="Explanation"/>
+  <concinst name="Documented Inheritance" type="Explanation"/>
+  <concinst name="No Documented Explanation" type="Explanation"/>
+  <concinst name="No Declared Salary Payer" type="Counterparty"/>
+
+  <!-- Risk tiers and onboarding ratings -->
+  <concinst name="Low Risk Context" type="Risk Tier"/>
+  <concinst name="Standard Risk Context" type="Risk Tier"/>
+  <concinst name="Elevated Risk Context" type="Risk Tier"/>
+  <concinst name="High Risk Context" type="Risk Tier"/>
+  <concinst name="Low" type="Risk Rating"/>
+  <concinst name="Medium" type="Risk Rating"/>
+  <concinst name="High" type="Risk Rating"/>
+
+  <!-- Customer types -->
+  <concinst name="Personal" type="Customer Type"/>
+  <concinst name="Business" type="Customer Type"/>
+  <concinst name="Corporate" type="Customer Type"/>
+
+  <!-- Adverse media dimensions -->
+  <concinst name="Financial Crime" type="Media Relevance"/>
+  <concinst name="Fraud" type="Media Relevance"/>
+  <concinst name="Other" type="Media Relevance"/>
+  <concinst name="None" type="Media Relevance"/>
+  <concinst name="High Credibility" type="Media Credibility"/>
+  <concinst name="Medium Credibility" type="Media Credibility"/>
+  <concinst name="Low Credibility" type="Media Credibility"/>
+
+  <!-- Directions and channels -->
+  <concinst name="Inbound" type="Direction"/>
+  <concinst name="Outbound" type="Direction"/>
+  <concinst name="Cash Deposit" type="Channel"/>
+  <concinst name="Faster Payment" type="Channel"/>
+  <concinst name="International Wire" type="Channel"/>
+  <concinst name="Card Payment" type="Channel"/>
+  <concinst name="Standing Order" type="Channel"/>
+  <concinst name="Internal Transfer" type="Channel"/>
+  <concinst name="Crypto Exchange Transfer" type="Channel"/>
+  <concinst name="Cheque" type="Channel"/>
+
+  <!-- Jurisdiction risk levels. The listed jurisdictions are an        -->
+  <!-- illustrative maintenance table mirroring FATF call-for-action    -->
+  <!-- and increased-monitoring lists. Maintain from FATF publications. -->
+  <concinst name="Call For Action" type="Jurisdiction Risk"/>
+  <concinst name="Enhanced Monitoring" type="Jurisdiction Risk"/>
+  <concinst name="United Kingdom" type="Jurisdiction"/>
+  <concinst name="North Korea" type="Jurisdiction"/>
+  <concinst name="Iran" type="Jurisdiction"/>
+  <concinst name="Myanmar" type="Jurisdiction"/>
+  <concinst name="Syria" type="Jurisdiction"/>
+  <concinst name="South Sudan" type="Jurisdiction"/>
+  <concinst name="Haiti" type="Jurisdiction"/>
+  <concinst name="Yemen" type="Jurisdiction"/>
+
+  <!-- Alert types produced by the upstream monitoring system -->
+  <concinst name="Cash Threshold Rule" type="Alert Type"/>
+  <concinst name="Velocity Rule" type="Alert Type"/>
+  <concinst name="Profile Deviation Rule" type="Alert Type"/>
+  <concinst name="Watchlist Jurisdiction Rule" type="Alert Type"/>
+  <concinst name="Dormancy Reactivation Rule" type="Alert Type"/>
+
+  <!-- Customer risk context factors -->
+  <concinst name="High Base Risk Rating" type="Risk Factor"/>
+  <concinst name="Medium Base Risk Rating" type="Risk Factor"/>
+  <concinst name="Politically Exposed Person" type="Risk Factor"/>
+  <concinst name="Credible Financial Crime Media" type="Risk Factor"/>
+  <concinst name="Adverse Media Noted" type="Risk Factor"/>
+  <concinst name="Prior SAR Filed" type="Risk Factor"/>
+  <concinst name="Elevated Prior Alert Volume" type="Risk Factor"/>
+  <concinst name="Dormant Account Reactivated" type="Risk Factor"/>
+  <concinst name="Recently Opened Account" type="Risk Factor"/>
+  <concinst name="Stale KYC Refresh" type="Risk Factor"/>
+
+  <!-- Control reasons: closure hard blocks and defeater overrides -->
+  <concinst name="Automated Monitoring" type="Alert Source"/>
+  <concinst name="Staff Raised" type="Alert Source"/>
+  <concinst name="External Referral" type="Alert Source"/>
+  <concinst name="Staff Raised Concern" type="Control Reason"/>
+  <concinst name="Inbound Fraud Report Match" type="Control Reason"/>
+  <concinst name="Fraud Database Marker" type="Control Reason"/>
+  <concinst name="Unresolved Sanctions Match" type="Control Reason"/>
+  <concinst name="Call For Action Exposure" type="Control Reason"/>
+  <concinst name="Stale KYC Profile" type="Control Reason"/>
+  <concinst name="Credible Adverse Media Finding" type="Control Reason"/>
+  <concinst name="Prior SAR On File" type="Control Reason"/>
+
+  <!-- Recommended next steps -->
+  <concinst name="File SAR With Nominated Officer" type="Next Step"/>
+  <concinst name="Assign To Investigations Queue" type="Next Step"/>
+  <concinst name="Issue Neutral Customer Enquiry" type="Next Step"/>
+  <concinst name="Close With Documented Rationale" type="Next Step"/>
+
+  <!-- Review routing -->
+  <concinst name="Second Reviewer Required" type="Review Requirement"/>
+
+  <!-- Policy instance -->
+  <concinst name="TM Policy" type="Policy"/>
+
+  <!-- ========================= Data facts ============================ -->
+
+  <!-- Jurisdiction risk table -->
+  <relinst type="has jurisdiction risk level" subject="North Korea" object="Call For Action"/>
+  <relinst type="has jurisdiction risk level" subject="Iran" object="Call For Action"/>
+  <relinst type="has jurisdiction risk level" subject="Myanmar" object="Call For Action"/>
+  <relinst type="has jurisdiction risk level" subject="Syria" object="Enhanced Monitoring"/>
+  <relinst type="has jurisdiction risk level" subject="South Sudan" object="Enhanced Monitoring"/>
+  <relinst type="has jurisdiction risk level" subject="Haiti" object="Enhanced Monitoring"/>
+  <relinst type="has jurisdiction risk level" subject="Yemen" object="Enhanced Monitoring"/>
+
+  <!-- TM Policy operational parameters, GBP -->
+  <relinst type="has near threshold lower bound" subject="TM Policy" object="8500"/>
+  <relinst type="has cash alert threshold" subject="TM Policy" object="10000"/>
+  <relinst type="has structuring strong count" subject="TM Policy" object="3"/>
+  <relinst type="has structuring moderate count" subject="TM Policy" object="3"/>
+  <relinst type="has structuring strong window days" subject="TM Policy" object="30"/>
+  <relinst type="has structuring window days" subject="TM Policy" object="45"/>
+  <relinst type="has pass through ratio" subject="TM Policy" object="0.8"/>
+  <relinst type="has pass through window days" subject="TM Policy" object="7"/>
+  <relinst type="has strong pass through ratio" subject="TM Policy" object="0.9"/>
+  <relinst type="has strong pass through window days" subject="TM Policy" object="3"/>
+  <relinst type="has material inflow floor" subject="TM Policy" object="5000"/>
+  <relinst type="has mule inflow floor" subject="TM Policy" object="1000"/>
+  <relinst type="has mule payer count" subject="TM Policy" object="4"/>
+  <relinst type="has new account age months" subject="TM Policy" object="6"/>
+  <relinst type="has mismatch multiple" subject="TM Policy" object="3"/>
+  <relinst type="has strong mismatch multiple" subject="TM Policy" object="10"/>
+  <relinst type="has seasonal allowance multiple" subject="TM Policy" object="6"/>
+  <relinst type="has known coverage share" subject="TM Policy" object="0.8"/>
+  <relinst type="has round amount share" subject="TM Policy" object="0.5"/>
+  <relinst type="has round wire minimum count" subject="TM Policy" object="3"/>
+  <relinst type="has cash intensity margin percent" subject="TM Policy" object="25"/>
+  <relinst type="has salary band percent" subject="TM Policy" object="15"/>
+  <relinst type="has stale kyc months" subject="TM Policy" object="24"/>
+  <relinst type="has closure kyc limit months" subject="TM Policy" object="12"/>
+  <relinst type="has seasonal precedent months" subject="TM Policy" object="18"/>
+  <relinst type="has enhanced monitoring txn minimum" subject="TM Policy" object="2"/>
+
+  <!-- Suppression map: which benign explanation defeats which typology. -->
+  <!-- Deliberate-conduct typologies (Structuring, Money Mule Pattern,   -->
+  <!-- High Risk Jurisdiction Exposure) are never suppressed and are     -->
+  <!-- absent from this map by design.                                   -->
+  <relinst type="explanation suppresses typology" subject="Salary Pattern" object="Expected Activity Mismatch"/>
+  <relinst type="explanation suppresses typology" subject="Known Counterparty Coverage" object="Expected Activity Mismatch"/>
+  <relinst type="explanation suppresses typology" subject="Known Counterparty Coverage" object="Rapid Movement"/>
+  <relinst type="explanation suppresses typology" subject="Known Counterparty Coverage" object="Round Amount Corporate Flows"/>
+  <relinst type="explanation suppresses typology" subject="Declared Seasonal Trade" object="Expected Activity Mismatch"/>
+  <relinst type="explanation suppresses typology" subject="Declared Seasonal Trade" object="Cash Intensity Anomaly"/>
+  <relinst type="explanation suppresses typology" subject="Documented Property Sale" object="Expected Activity Mismatch"/>
+  <relinst type="explanation suppresses typology" subject="Documented Property Sale" object="Rapid Movement"/>
+  <relinst type="explanation suppresses typology" subject="Documented Loan Drawdown" object="Expected Activity Mismatch"/>
+  <relinst type="explanation suppresses typology" subject="Documented Loan Drawdown" object="Rapid Movement"/>
+  <relinst type="explanation suppresses typology" subject="Documented Inheritance" object="Expected Activity Mismatch"/>
+  <relinst type="explanation suppresses typology" subject="Documented Inheritance" object="Rapid Movement"/>
+
+  <!-- Directly reportable typologies: strong unsuppressed evidence of   -->
+  <!-- these alone meets the POCA s.330 reasonable-grounds standard.     -->
+  <relinst type="is directly reportable typology" subject="Money Mule Pattern" object="true"/>
+  <relinst type="is directly reportable typology" subject="Structuring" object="true"/>
+
+  <!-- Only genuine case-file explanation types are accepted by the      -->
+  <!-- documented-explanation defeater.                                  -->
+  <relinst type="is documented explanation type" subject="Documented Property Sale" object="true"/>
+  <relinst type="is documented explanation type" subject="Documented Loan Drawdown" object="true"/>
+  <relinst type="is documented explanation type" subject="Documented Inheritance" object="true"/>
+
+  <!-- Risk factor points map for the customer context score -->
+  <relinst type="factor carries points" subject="High Base Risk Rating" object="30"/>
+  <relinst type="factor carries points" subject="Medium Base Risk Rating" object="15"/>
+  <relinst type="factor carries points" subject="Politically Exposed Person" object="25"/>
+  <relinst type="factor carries points" subject="Credible Financial Crime Media" object="30"/>
+  <relinst type="factor carries points" subject="Adverse Media Noted" object="8"/>
+  <relinst type="factor carries points" subject="Prior SAR Filed" object="20"/>
+  <relinst type="factor carries points" subject="Elevated Prior Alert Volume" object="10"/>
+  <relinst type="factor carries points" subject="Dormant Account Reactivated" object="10"/>
+  <relinst type="factor carries points" subject="Recently Opened Account" object="8"/>
+  <relinst type="factor carries points" subject="Stale KYC Refresh" object="8"/>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 1 - TRANSACTION FEATURE DERIVATION                         -->
+  <!-- Pure cf 100 arithmetic over injected transaction facts. Every    -->
+  <!-- aggregation over a possibly-empty set is count-guarded because   -->
+  <!-- minObjects and maxObjects over an empty set bind null which      -->
+  <!-- compares like infinity.                                          -->
+  <!-- ================================================================ -->
+
+  <relinst type="has inbound txn" cf="100" name="Classify inbound transactions">
+    <condition rel="has alerted transaction" subject="%S" object="%O"/>
+    <condition rel="has txn direction" subject="%O" object="Inbound"/>
+  </relinst>
+
+  <relinst type="has outbound txn" cf="100" name="Classify outbound transactions">
+    <condition rel="has alerted transaction" subject="%S" object="%O"/>
+    <condition rel="has txn direction" subject="%O" object="Outbound"/>
+  </relinst>
+
+  <relinst type="has cash deposit txn" cf="100" name="Classify cash deposits">
+    <condition rel="has inbound txn" subject="%S" object="%O"/>
+    <condition rel="has txn channel" subject="%O" object="Cash Deposit"/>
+  </relinst>
+
+  <relinst type="has inbound value item" cf="100" name="Inbound value items">
+    <condition rel="has inbound txn" subject="%S" object="%T"/>
+    <condition rel="has txn amount" subject="%T" object="%O"/>
+  </relinst>
+
+  <relinst type="has outbound value item" cf="100" name="Outbound value items">
+    <condition rel="has outbound txn" subject="%S" object="%T"/>
+    <condition rel="has txn amount" subject="%T" object="%O"/>
+  </relinst>
+
+  <relinst type="has cash deposit value item" cf="100" name="Cash deposit value items">
+    <condition rel="has cash deposit txn" subject="%S" object="%T"/>
+    <condition rel="has txn amount" subject="%T" object="%O"/>
+  </relinst>
+
+  <relinst type="has total inbound value" cf="100" name="Total inbound value">
+    <condition expression="sumObjects(%S,'has inbound value item',*)" value="%O" alt="Sum of all inbound transaction amounts"/>
+  </relinst>
+
+  <relinst type="has total outbound value" cf="100" name="Total outbound value">
+    <condition expression="sumObjects(%S,'has outbound value item',*)" value="%O" alt="Sum of all outbound transaction amounts"/>
+  </relinst>
+
+  <relinst type="has total cash deposit value" cf="100" name="Total cash deposit value">
+    <condition expression="sumObjects(%S,'has cash deposit value item',*)" value="%O" alt="Sum of all cash deposit amounts"/>
+  </relinst>
+
+  <!-- Known counterparty recognition: expected counterparties from KYC plus the declared salary payer -->
+  <relinst type="has known counterparty txn" cf="100" name="Transactions with expected counterparties">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has alerted transaction" subject="%S" object="%O"/>
+    <condition rel="has txn counterparty" subject="%O" object="%CP"/>
+    <condition rel="has expected counterparty" subject="%CUST" object="%CP"/>
+  </relinst>
+
+  <relinst type="has known counterparty txn" cf="100" name="Transactions with the declared salary payer">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has alerted transaction" subject="%S" object="%O"/>
+    <condition rel="has txn counterparty" subject="%O" object="%CP"/>
+    <condition rel="has salary payer" subject="%CUST" object="%CP"/>
+  </relinst>
+
+  <relinst type="has known counterparty value item" cf="100" name="Known counterparty value items">
+    <condition rel="has known counterparty txn" subject="%S" object="%T"/>
+    <condition rel="has txn amount" subject="%T" object="%O"/>
+  </relinst>
+
+  <relinst type="has total known counterparty value" cf="100" name="Total known counterparty value">
+    <condition expression="sumObjects(%S,'has known counterparty value item',*)" value="%O" alt="Sum of amounts involving recognised counterparties"/>
+  </relinst>
+
+  <relinst type="has known coverage ratio" cf="100" name="Share of total flow involving recognised counterparties">
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition rel="has total outbound value" subject="%S" object="%OUT"/>
+    <condition expression="%IN + %OUT" value="%FLOW"/>
+    <condition expression="%FLOW is greater than 0"/>
+    <condition rel="has total known counterparty value" subject="%S" object="%KN"/>
+    <condition expression="%KN / %FLOW" value="%O" alt="Recognised counterparty value divided by total flow"/>
+  </relinst>
+
+  <!-- Near threshold cash deposits for the structuring sub-model -->
+  <relinst type="has near threshold cash txn" cf="100" name="Cash deposits just below the internal cash threshold">
+    <condition rel="has cash deposit txn" subject="%S" object="%O"/>
+    <condition rel="has txn amount" subject="%O" object="%AMT"/>
+    <condition rel="has near threshold lower bound" subject="TM Policy" object="%NLOW"/>
+    <condition rel="has cash alert threshold" subject="TM Policy" object="%THRESH"/>
+    <condition expression="%THRESH - 0.01" value="%NEDGE"/>
+    <condition expression="isWithinRange(%AMT,%NLOW,%NEDGE)" alt="Amount sits in the band just below the cash threshold"/>
+  </relinst>
+
+  <relinst type="has near threshold cash count" cf="100" name="Count of near threshold cash deposits">
+    <condition expression="countRelationshipInstances(%S,'has near threshold cash txn',*)" value="%O"/>
+  </relinst>
+
+  <relinst type="has near threshold date entry" cf="100" name="Dates of near threshold cash deposits">
+    <condition rel="has near threshold cash txn" subject="%S" object="%T"/>
+    <condition rel="has txn date" subject="%T" object="%O"/>
+  </relinst>
+
+  <relinst type="has first near threshold date" cf="100" name="Earliest near threshold deposit">
+    <condition expression="countRelationshipInstances(%S,'has near threshold date entry',*) is greater than or equal to 1" alt="Guarded so same day deposit clusters still produce a span"/>
+    <condition expression="minObjects(%S,'has near threshold date entry',*)" value="%O"/>
+  </relinst>
+
+  <relinst type="has last near threshold date" cf="100" name="Latest near threshold deposit">
+    <condition expression="countRelationshipInstances(%S,'has near threshold date entry',*) is greater than or equal to 1" alt="Guarded so same day deposit clusters still produce a span"/>
+    <condition expression="maxObjects(%S,'has near threshold date entry',*)" value="%O"/>
+  </relinst>
+
+  <relinst type="has near threshold span days" cf="100" name="Span of near threshold deposits in days">
+    <condition rel="has first near threshold date" subject="%S" object="%D1"/>
+    <condition rel="has last near threshold date" subject="%S" object="%D2"/>
+    <condition expression="daysBetween(%D1,%D2)" value="%O"/>
+  </relinst>
+
+  <!-- Activity dates and velocity for the rapid movement sub-model -->
+  <relinst type="has activity date entry" cf="100" name="Dates of all alerted transactions">
+    <condition rel="has alerted transaction" subject="%S" object="%T"/>
+    <condition rel="has txn date" subject="%T" object="%O"/>
+  </relinst>
+
+  <relinst type="has last activity date" cf="100" name="Most recent activity date">
+    <condition expression="countRelationshipInstances(%S,'has activity date entry',*) is greater than or equal to 1"/>
+    <condition expression="maxObjects(%S,'has activity date entry',*)" value="%O"/>
+  </relinst>
+
+  <relinst type="has inbound date entry" cf="100" name="Dates of inbound transactions">
+    <condition rel="has inbound txn" subject="%S" object="%T"/>
+    <condition rel="has txn date" subject="%T" object="%O"/>
+  </relinst>
+
+  <relinst type="has outbound date entry" cf="100" name="Dates of outbound transactions">
+    <condition rel="has outbound txn" subject="%S" object="%T"/>
+    <condition rel="has txn date" subject="%T" object="%O"/>
+  </relinst>
+
+  <relinst type="has first inbound date" cf="100" name="Earliest inbound date">
+    <condition expression="countRelationshipInstances(%S,'has inbound date entry',*) is greater than or equal to 1"/>
+    <condition expression="minObjects(%S,'has inbound date entry',*)" value="%O"/>
+  </relinst>
+
+  <relinst type="has last outbound date" cf="100" name="Latest outbound date">
+    <condition expression="countRelationshipInstances(%S,'has outbound date entry',*) is greater than or equal to 1"/>
+    <condition expression="maxObjects(%S,'has outbound date entry',*)" value="%O"/>
+  </relinst>
+
+  <relinst type="has pass through days" cf="100" name="Days between first inbound and last outbound">
+    <condition rel="has first inbound date" subject="%S" object="%D1"/>
+    <condition rel="has last outbound date" subject="%S" object="%D2"/>
+    <condition expression="isBeforeDate(%D2,%D1) is equal to false" alt="Outbound activity that wholly precedes the inbound credit is not pass through"/>
+    <condition expression="daysBetween(%D1,%D2)" value="%O"/>
+  </relinst>
+
+  <relinst type="has outflow ratio" cf="100" name="Outbound value as a share of inbound value">
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition expression="%IN is greater than 0"/>
+    <condition rel="has total outbound value" subject="%S" object="%OUT"/>
+    <condition expression="%OUT / %IN" value="%O" alt="Outbound total divided by inbound total"/>
+  </relinst>
+
+  <!-- Cash intensity and expected activity features -->
+  <relinst type="has cash inflow percent" cf="100" name="Cash share of inflows as a percentage">
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition expression="%IN is greater than 0"/>
+    <condition rel="has total cash deposit value" subject="%S" object="%CASH"/>
+    <condition expression="%CASH / %IN" value="%SHARE"/>
+    <condition expression="%SHARE * 100" value="%O"/>
+  </relinst>
+
+  <relinst type="has expected turnover multiple" cf="100" name="Inflows as a multiple of expected monthly turnover">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has expected monthly turnover" subject="%CUST" object="%EXP"/>
+    <condition expression="%EXP is greater than 0"/>
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition expression="%IN / %EXP" value="%O" alt="Inbound total divided by expected monthly turnover"/>
+  </relinst>
+
+  <!-- Payer dispersion for the mule sub-model -->
+  <relinst type="has third party payer" cf="100" name="Unrecognised inbound payers">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has inbound txn" subject="%S" object="%T"/>
+    <condition rel="has txn counterparty" subject="%T" object="%O"/>
+    <condition expression="countRelationshipInstances(%CUST,'has expected counterparty',%O) is equal to 0" alt="Payer is not an expected counterparty"/>
+    <condition expression="countRelationshipInstances(%CUST,'has salary payer',%O) is equal to 0" alt="Payer is not the declared salary payer"/>
+  </relinst>
+
+  <relinst type="has third party payer count" cf="100" name="Count of distinct unrecognised payers">
+    <condition expression="countRelationshipInstances(%S,'has third party payer',*)" value="%O"/>
+  </relinst>
+
+  <!-- Wire patterns for the corporate round amount sub-model -->
+  <relinst type="has outbound wire txn" cf="100" name="Outbound international wires">
+    <condition rel="has outbound txn" subject="%S" object="%O"/>
+    <condition rel="has txn channel" subject="%O" object="International Wire"/>
+  </relinst>
+
+  <relinst type="has round outbound wire txn" cf="100" name="Round amount outbound wires">
+    <condition rel="has outbound wire txn" subject="%S" object="%O"/>
+    <condition rel="has txn amount" subject="%O" object="%AMT"/>
+    <condition expression="mod(%AMT,1000)" value="%REM"/>
+    <condition expression="%REM is equal to 0" alt="Amount is an exact multiple of 1000"/>
+  </relinst>
+
+  <relinst type="has new overseas counterparty txn" cf="100" name="Outbound transactions to unrecognised overseas counterparties">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has outbound txn" subject="%S" object="%O"/>
+    <condition rel="has txn jurisdiction" subject="%O" object="%J"/>
+    <condition expression="%J is not equal to 'United Kingdom'"/>
+    <condition rel="has txn counterparty" subject="%O" object="%CP"/>
+    <condition expression="countRelationshipInstances(%CUST,'has expected counterparty',%CP) is equal to 0" alt="Counterparty is not expected from KYC"/>
+  </relinst>
+
+  <!-- Jurisdiction exposure -->
+  <relinst type="has call for action txn" cf="100" name="Transactions with call for action jurisdictions">
+    <condition rel="has alerted transaction" subject="%S" object="%O"/>
+    <condition rel="has txn jurisdiction" subject="%O" object="%J"/>
+    <condition rel="has jurisdiction risk level" subject="%J" object="Call For Action"/>
+  </relinst>
+
+  <relinst type="has enhanced monitoring txn" cf="100" name="Transactions with enhanced monitoring jurisdictions">
+    <condition rel="has alerted transaction" subject="%S" object="%O"/>
+    <condition rel="has txn jurisdiction" subject="%O" object="%J"/>
+    <condition rel="has jurisdiction risk level" subject="%J" object="Enhanced Monitoring"/>
+  </relinst>
+
+  <!-- Salary recognition for the salary defeater -->
+  <relinst type="has salary credit txn" cf="100" name="Inbound credits matching the declared salary pattern">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has salary payer" subject="%CUST" object="%P"/>
+    <condition rel="has typical salary amount" subject="%CUST" object="%TYP"/>
+    <condition rel="has salary band percent" subject="TM Policy" object="%BPC"/>
+    <condition rel="has inbound txn" subject="%S" object="%O"/>
+    <condition rel="has txn counterparty" subject="%O" object="%P"/>
+    <condition rel="has txn amount" subject="%O" object="%AMT"/>
+    <condition expression="%BPC / 100" value="%BF"/>
+    <condition expression="%TYP * (1 - %BF)" value="%LO"/>
+    <condition expression="%TYP * (1 + %BF)" value="%HI"/>
+    <condition expression="isWithinRange(%AMT,%LO,%HI)" alt="Credit amount is within the declared salary band"/>
+  </relinst>
+
+  <relinst type="has salary credit value item" cf="100" name="Salary credit value items">
+    <condition rel="has salary credit txn" subject="%S" object="%T"/>
+    <condition rel="has txn amount" subject="%T" object="%O"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 2 - CUSTOMER RISK CONTEXT                                  -->
+  <!-- Each recognised factor asserts a named risk factor fact; a       -->
+  <!-- generic rule maps factors to points via the data table; the      -->
+  <!-- score bands into a tier. Unknown context yields score 0 which    -->
+  <!-- maps to Low, so closing rules separately require the risk        -->
+  <!-- rating to actually be known.                                     -->
+  <!-- ================================================================ -->
+
+  <relinst type="has context risk factor" object="High Base Risk Rating" cf="100" name="Factor - high onboarding risk rating">
+    <condition rel="has risk rating" subject="%S" object="High"/>
+  </relinst>
+
+  <relinst type="has context risk factor" object="Medium Base Risk Rating" cf="100" name="Factor - medium onboarding risk rating">
+    <condition rel="has risk rating" subject="%S" object="Medium"/>
+  </relinst>
+
+  <relinst type="has context risk factor" object="Politically Exposed Person" cf="100" name="Factor - politically exposed person">
+    <condition rel="is politically exposed" subject="%S" object="%PEP"/>
+    <condition expression="%PEP is equal to true"/>
+  </relinst>
+
+  <relinst type="has credible financial crime media" object="true" cf="100" name="Credible recent financial crime media finding">
+    <condition expression="countRelationshipInstances(%S,'has adverse media relevance','Financial Crime')" value="%MFC" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has adverse media relevance','Fraud')" value="%MFR" weight="1"/>
+    <condition expression="%MFC + %MFR" value="%MREL" weight="1"/>
+    <condition expression="%MREL is greater than or equal to 1" weight="1" alt="Credibility is only examined once a financial crime or fraud finding is known"/>
+    <condition rel="has adverse media credibility" subject="%S" object="%CRED"/>
+    <condition expression="%CRED is not equal to 'Low Credibility'"/>
+    <condition rel="has adverse media age months" subject="%S" object="%AGE"/>
+    <condition expression="%AGE is less than or equal to 24" alt="Media finding is recent"/>
+  </relinst>
+
+  <relinst type="has context risk factor" object="Credible Financial Crime Media" cf="100" name="Factor - credible financial crime media">
+    <condition rel="has credible financial crime media" subject="%S" object="%F"/>
+    <condition expression="%F is equal to true"/>
+  </relinst>
+
+  <relinst type="has context risk factor" object="Adverse Media Noted" cf="100" name="Factor - other adverse media noted">
+    <condition rel="has adverse media relevance" subject="%S" object="%REL"/>
+    <condition expression="%REL is not equal to 'None'"/>
+    <condition expression="countRelationshipInstances(%S,'has credible financial crime media',*) is equal to 0" alt="Finding does not meet the credible financial crime bar"/>
+  </relinst>
+
+  <relinst type="has context risk factor" object="Prior SAR Filed" cf="100" name="Factor - prior SAR on file">
+    <condition rel="has prior sar filed" subject="%S" object="%SAR"/>
+    <condition expression="%SAR is equal to true"/>
+  </relinst>
+
+  <relinst type="has context risk factor" object="Elevated Prior Alert Volume" cf="100" name="Factor - three or more prior alerts">
+    <condition rel="has prior alert count" subject="%S" object="%N"/>
+    <condition expression="%N is greater than or equal to 3"/>
+  </relinst>
+
+  <relinst type="has context risk factor" object="Dormant Account Reactivated" cf="100" name="Factor - dormant account reactivated">
+    <condition rel="was dormant before review period" subject="%S" object="%D"/>
+    <condition expression="%D is equal to true"/>
+  </relinst>
+
+  <relinst type="has context risk factor" object="Recently Opened Account" cf="100" name="Factor - recently opened account">
+    <condition rel="has account age months" subject="%S" object="%M"/>
+    <condition rel="has new account age months" subject="TM Policy" object="%NEW"/>
+    <condition expression="%M is less than or equal to %NEW"/>
+  </relinst>
+
+  <relinst type="has context risk factor" object="Stale KYC Refresh" cf="100" name="Factor - stale KYC refresh">
+    <condition rel="has months since kyc refresh" subject="%S" object="%M"/>
+    <condition rel="has stale kyc months" subject="TM Policy" object="%LIM"/>
+    <condition expression="%M is greater than or equal to %LIM"/>
+  </relinst>
+
+  <relinst type="is new or reactivated account" object="true" cf="100" name="New account for mule assessment">
+    <condition rel="has account age months" subject="%S" object="%M"/>
+    <condition rel="has new account age months" subject="TM Policy" object="%NEW"/>
+    <condition expression="%M is less than or equal to %NEW"/>
+  </relinst>
+
+  <relinst type="is new or reactivated account" object="true" cf="100" name="Reactivated dormant account for mule assessment">
+    <condition rel="was dormant before review period" subject="%S" object="%D"/>
+    <condition expression="%D is equal to true"/>
+  </relinst>
+
+  <relinst type="has context risk points" cf="100" name="Points for each identified risk factor">
+    <condition rel="has context risk factor" subject="%S" object="%F"/>
+    <condition rel="factor carries points" subject="%F" object="%O"/>
+  </relinst>
+
+  <relinst type="has context risk score" cf="100" name="Customer context risk score">
+    <condition expression="sumObjects(%S,'has context risk points',*)" value="%O" alt="Sum of points across identified risk factors"/>
+  </relinst>
+
+  <relinst type="has customer risk tier" object="High Risk Context" cf="100" name="Tier - high risk context">
+    <condition rel="has context risk score" subject="%S" object="%SC"/>
+    <condition expression="%SC is greater than or equal to 60"/>
+  </relinst>
+
+  <relinst type="has customer risk tier" object="Elevated Risk Context" cf="100" name="Tier - elevated risk context">
+    <condition rel="has context risk score" subject="%S" object="%SC"/>
+    <condition expression="%SC is greater than or equal to 30"/>
+    <condition expression="%SC is less than 60"/>
+  </relinst>
+
+  <relinst type="has customer risk tier" object="Standard Risk Context" cf="100" name="Tier - standard risk context">
+    <condition rel="has context risk score" subject="%S" object="%SC"/>
+    <condition expression="%SC is greater than or equal to 10"/>
+    <condition expression="%SC is less than 30"/>
+  </relinst>
+
+  <relinst type="has customer risk tier" object="Low Risk Context" cf="100" name="Tier - low risk context">
+    <condition rel="has context risk score" subject="%S" object="%SC"/>
+    <condition expression="%SC is less than 10"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 2B - CONTROL CONDITIONS                                    -->
+  <!-- Closure hard blocks: states in which close-as-false-positive is  -->
+  <!-- legally or procedurally unavailable (fraud match, unresolved     -->
+  <!-- sanctions, call for action nexus, stale KYC, credible adverse    -->
+  <!-- media, prior SAR). Defeater overrides: states that void every    -->
+  <!-- benign explanation (per the global override constraints in the  -->
+  <!-- regulatory synthesis).                                           -->
+  <!-- ================================================================ -->
+
+  <relinst type="has closure block" object="Inbound Fraud Report Match" cf="100" name="Block - inbound fraud report match">
+    <condition rel="has inbound fraud report match" subject="%S" object="%F"/>
+    <condition expression="%F is equal to true"/>
+  </relinst>
+
+  <relinst type="has closure block" object="Fraud Database Marker" cf="100" name="Block - fraud database marker on customer">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has fraud database marker" subject="%CUST" object="%F"/>
+    <condition expression="%F is equal to true"/>
+  </relinst>
+
+  <relinst type="has closure block" object="Unresolved Sanctions Match" cf="100" name="Block - unresolved sanctions match">
+    <condition rel="has unresolved sanctions match" subject="%S" object="%F"/>
+    <condition expression="%F is equal to true"/>
+  </relinst>
+
+  <relinst type="has closure block" object="Call For Action Exposure" cf="100" name="Block - call for action jurisdiction exposure">
+    <condition expression="countRelationshipInstances(%S,'has call for action txn',*) is greater than or equal to 1"/>
+  </relinst>
+
+  <relinst type="has closure block" object="Stale KYC Profile" cf="100" name="Block - stale KYC profile">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has months since kyc refresh" subject="%CUST" object="%M"/>
+    <condition rel="has closure kyc limit months" subject="TM Policy" object="%LIM"/>
+    <condition expression="%M is greater than %LIM" alt="Consistency with the expected profile cannot be affirmed against a record older than the closure limit"/>
+  </relinst>
+
+  <relinst type="has closure block" object="Credible Adverse Media Finding" cf="100" name="Block - credible financial crime media">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has credible financial crime media" subject="%CUST" object="%F"/>
+    <condition expression="%F is equal to true"/>
+  </relinst>
+
+  <relinst type="has closure block" object="Prior SAR On File" cf="100" name="Block - prior SAR on file">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has prior sar filed" subject="%CUST" object="%P"/>
+    <condition expression="%P is equal to true"/>
+  </relinst>
+
+  <relinst type="has defeater override" object="Inbound Fraud Report Match" cf="100" name="Override - fraud report voids benign explanations">
+    <condition rel="has inbound fraud report match" subject="%S" object="%F"/>
+    <condition expression="%F is equal to true"/>
+  </relinst>
+
+  <relinst type="has defeater override" object="Fraud Database Marker" cf="100" name="Override - fraud marker voids benign explanations">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has fraud database marker" subject="%CUST" object="%F"/>
+    <condition expression="%F is equal to true"/>
+  </relinst>
+
+  <relinst type="has defeater override" object="Unresolved Sanctions Match" cf="100" name="Override - sanctions match voids benign explanations">
+    <condition rel="has unresolved sanctions match" subject="%S" object="%F"/>
+    <condition expression="%F is equal to true"/>
+  </relinst>
+
+  <relinst type="has defeater override" object="Call For Action Exposure" cf="100" name="Override - call for action nexus voids benign explanations">
+    <condition expression="countRelationshipInstances(%S,'has call for action txn',*) is greater than or equal to 1"/>
+  </relinst>
+
+  <relinst type="has defeater override" object="Prior SAR On File" cf="100" name="Override - prior SAR recurrence voids benign explanations">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has prior sar filed" subject="%CUST" object="%P"/>
+    <condition expression="%P is equal to true" alt="Recurrence on a previously reported customer must be re-examined, not explained away"/>
+  </relinst>
+
+  <relinst type="has closure block" object="Staff Raised Concern" cf="100" name="Block - staff raised concern">
+    <condition rel="has alert source" subject="%S" object="Staff Raised"/>
+  </relinst>
+
+  <relinst type="has defeater override" object="Staff Raised Concern" cf="100" name="Override - staff raised concern voids benign explanations">
+    <condition rel="has alert source" subject="%S" object="Staff Raised"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 3 - TYPOLOGY SUB-MODELS                                    -->
+  <!-- Each typology asserts a strong or moderate signal with a graded  -->
+  <!-- certainty. Strong signals approach the POCA suspicion standard;  -->
+  <!-- moderate signals mark JMLSG unusual activity needing enquiry.    -->
+  <!-- ================================================================ -->
+
+  <!-- Structuring -->
+  <relinst type="has strong typology signal" object="Structuring" cf="90" name="Structuring - repeated near threshold cash deposits in a tight window">
+    <condition rel="has near threshold cash count" subject="%S" object="%N"/>
+    <condition rel="has structuring strong count" subject="TM Policy" object="%MIN"/>
+    <condition expression="%N is greater than or equal to %MIN"/>
+    <condition rel="has near threshold span days" subject="%S" object="%SP"/>
+    <condition rel="has structuring strong window days" subject="TM Policy" object="%W"/>
+    <condition expression="%SP is less than or equal to %W" alt="Deposits fall within the strong structuring window"/>
+  </relinst>
+
+  <relinst type="has moderate typology signal" object="Structuring" cf="75" name="Structuring - repeated near threshold cash deposits over the review window">
+    <condition rel="has near threshold cash count" subject="%S" object="%N"/>
+    <condition rel="has structuring moderate count" subject="TM Policy" object="%MIN"/>
+    <condition expression="%N is greater than or equal to %MIN"/>
+    <condition rel="has near threshold span days" subject="%S" object="%SP"/>
+    <condition rel="has structuring window days" subject="TM Policy" object="%W"/>
+    <condition expression="%SP is less than or equal to %W" alt="Deposits fall within the structuring review window"/>
+  </relinst>
+
+  <!-- Rapid movement -->
+  <relinst type="has strong typology signal" object="Rapid Movement" cf="85" name="Rapid movement - near total pass through within days">
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition rel="has material inflow floor" subject="TM Policy" object="%FLOOR"/>
+    <condition expression="%IN is greater than or equal to %FLOOR"/>
+    <condition rel="has outflow ratio" subject="%S" object="%R"/>
+    <condition rel="has strong pass through ratio" subject="TM Policy" object="%PR"/>
+    <condition expression="%R is greater than or equal to %PR"/>
+    <condition rel="has pass through days" subject="%S" object="%D"/>
+    <condition rel="has strong pass through window days" subject="TM Policy" object="%W"/>
+    <condition expression="%D is less than or equal to %W" alt="Funds left within the strong pass through window"/>
+  </relinst>
+
+  <relinst type="has moderate typology signal" object="Rapid Movement" cf="72" name="Rapid movement - substantial pass through within the week">
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition rel="has material inflow floor" subject="TM Policy" object="%FLOOR"/>
+    <condition expression="%IN is greater than or equal to %FLOOR"/>
+    <condition rel="has outflow ratio" subject="%S" object="%R"/>
+    <condition rel="has pass through ratio" subject="TM Policy" object="%PR"/>
+    <condition expression="%R is greater than or equal to %PR"/>
+    <condition rel="has pass through days" subject="%S" object="%D"/>
+    <condition rel="has pass through window days" subject="TM Policy" object="%W"/>
+    <condition expression="%D is less than or equal to %W" alt="Funds left within the pass through window"/>
+  </relinst>
+
+  <!-- Money mule pattern -->
+  <relinst type="has strong typology signal" object="Money Mule Pattern" cf="92" name="Mule - dispersed unrecognised payers into a new or reactivated account with rapid onward movement">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="is new or reactivated account" subject="%CUST" object="%NEW"/>
+    <condition expression="%NEW is equal to true"/>
+    <condition rel="has third party payer count" subject="%S" object="%N"/>
+    <condition rel="has mule payer count" subject="TM Policy" object="%MIN"/>
+    <condition expression="%N is greater than or equal to %MIN"/>
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition rel="has mule inflow floor" subject="TM Policy" object="%FLOOR"/>
+    <condition expression="%IN is greater than or equal to %FLOOR"/>
+    <condition rel="has outflow ratio" subject="%S" object="%R"/>
+    <condition rel="has pass through ratio" subject="TM Policy" object="%PR"/>
+    <condition expression="%R is greater than or equal to %PR"/>
+    <condition rel="has pass through days" subject="%S" object="%D"/>
+    <condition rel="has pass through window days" subject="TM Policy" object="%W"/>
+    <condition expression="%D is less than or equal to %W" alt="Inflows were moved on within the pass through window"/>
+  </relinst>
+
+  <relinst type="has strong typology signal" object="Money Mule Pattern" cf="95" name="Mule - inbound credit matched to an interbank fraud report">
+    <condition rel="has inbound fraud report match" subject="%S" object="%F"/>
+    <condition expression="%F is equal to true" alt="Matched fraud proceeds are treated as suspected criminal property"/>
+  </relinst>
+
+  <relinst type="has moderate typology signal" object="Money Mule Pattern" cf="75" name="Mule - dispersed unrecognised payers with rapid onward movement on an established account">
+    <condition rel="has third party payer count" subject="%S" object="%N"/>
+    <condition rel="has mule payer count" subject="TM Policy" object="%MIN"/>
+    <condition expression="%N is greater than or equal to %MIN"/>
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition rel="has mule inflow floor" subject="TM Policy" object="%FLOOR"/>
+    <condition expression="%IN is greater than or equal to %FLOOR"/>
+    <condition rel="has outflow ratio" subject="%S" object="%R"/>
+    <condition rel="has pass through ratio" subject="TM Policy" object="%PR"/>
+    <condition expression="%R is greater than or equal to %PR"/>
+    <condition rel="has pass through days" subject="%S" object="%D"/>
+    <condition rel="has pass through window days" subject="TM Policy" object="%W"/>
+    <condition expression="%D is less than or equal to %W" alt="Inflows were moved on within the pass through window"/>
+  </relinst>
+
+  <!-- Expected activity mismatch -->
+  <relinst type="has strong typology signal" object="Expected Activity Mismatch" cf="82" name="Mismatch - inflows far beyond the declared profile">
+    <condition rel="has expected turnover multiple" subject="%S" object="%MULT"/>
+    <condition rel="has strong mismatch multiple" subject="TM Policy" object="%LIM"/>
+    <condition expression="%MULT is greater than or equal to %LIM" alt="Inflows are many multiples of expected turnover"/>
+  </relinst>
+
+  <relinst type="has moderate typology signal" object="Expected Activity Mismatch" cf="70" name="Mismatch - inflows well beyond the declared profile">
+    <condition rel="has expected turnover multiple" subject="%S" object="%MULT"/>
+    <condition rel="has mismatch multiple" subject="TM Policy" object="%LIM"/>
+    <condition expression="%MULT is greater than or equal to %LIM" alt="Inflows exceed the mismatch multiple of expected turnover"/>
+  </relinst>
+
+  <!-- High risk jurisdiction exposure -->
+  <relinst type="has strong typology signal" object="High Risk Jurisdiction Exposure" cf="88" name="Jurisdiction - any exposure to a call for action jurisdiction">
+    <condition expression="countRelationshipInstances(%S,'has call for action txn',*) is greater than or equal to 1" alt="At least one transaction touches a call for action jurisdiction"/>
+  </relinst>
+
+  <relinst type="has moderate typology signal" object="High Risk Jurisdiction Exposure" cf="68" name="Jurisdiction - repeated exposure to enhanced monitoring jurisdictions">
+    <condition rel="has enhanced monitoring txn minimum" subject="TM Policy" object="%MIN"/>
+    <condition expression="countRelationshipInstances(%S,'has enhanced monitoring txn',*)" value="%N"/>
+    <condition expression="%N is greater than or equal to %MIN" alt="Repeated transactions with enhanced monitoring jurisdictions"/>
+  </relinst>
+
+  <!-- Cash intensity anomaly -->
+  <relinst type="has strong typology signal" object="Cash Intensity Anomaly" cf="85" name="Cash intensity - heavy cash into a business declared as non cash">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition expression="countRelationshipInstances(%CUST,'has customer type',*) is greater than or equal to 1" weight="1" alt="Customer type must be known"/>
+    <condition expression="countRelationshipInstances(%CUST,'has customer type','Personal') is equal to 0" weight="1" alt="Cash intensity applies to business and corporate customers"/>
+    <condition rel="has declared cash intensity percent" subject="%CUST" object="%DECL"/>
+    <condition expression="%DECL is less than or equal to 5"/>
+    <condition rel="has cash inflow percent" subject="%S" object="%PCT"/>
+    <condition expression="%PCT is greater than or equal to 60"/>
+    <condition rel="has total cash deposit value" subject="%S" object="%CV"/>
+    <condition rel="has cash alert threshold" subject="TM Policy" object="%THRESH"/>
+    <condition expression="%CV is greater than or equal to %THRESH" alt="Cash volume is material against the declared non cash profile"/>
+  </relinst>
+
+  <relinst type="has moderate typology signal" object="Cash Intensity Anomaly" cf="70" name="Cash intensity - cash share well above the declared level">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition expression="countRelationshipInstances(%CUST,'has customer type',*) is greater than or equal to 1" weight="1" alt="Customer type must be known"/>
+    <condition expression="countRelationshipInstances(%CUST,'has customer type','Personal') is equal to 0" weight="1" alt="Cash intensity applies to business and corporate customers"/>
+    <condition rel="has declared cash intensity percent" subject="%CUST" object="%DECL"/>
+    <condition rel="has cash intensity margin percent" subject="TM Policy" object="%MARGIN"/>
+    <condition expression="%DECL + %MARGIN" value="%LIM"/>
+    <condition rel="has cash inflow percent" subject="%S" object="%PCT"/>
+    <condition expression="%PCT is greater than %LIM"/>
+    <condition rel="has total cash deposit value" subject="%S" object="%CV"/>
+    <condition rel="has material inflow floor" subject="TM Policy" object="%FLOOR"/>
+    <condition expression="%CV is greater than or equal to %FLOOR" alt="Cash share exceeds the declared level by more than the tolerance margin"/>
+  </relinst>
+
+  <!-- Round amount corporate flows -->
+  <relinst type="has moderate typology signal" object="Round Amount Corporate Flows" cf="72" name="Round amounts - repeated round outbound wires including new overseas counterparties">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has customer type" subject="%CUST" object="%CT"/>
+    <condition expression="(%CT is equal to 'Corporate') or (%CT is equal to 'Business')"/>
+    <condition expression="countRelationshipInstances(%S,'has round outbound wire txn',*)" value="%RC"/>
+    <condition rel="has round wire minimum count" subject="TM Policy" object="%MINC"/>
+    <condition expression="%RC is greater than or equal to %MINC"/>
+    <condition expression="countRelationshipInstances(%S,'has outbound wire txn',*)" value="%WC"/>
+    <condition expression="%WC is greater than 0"/>
+    <condition expression="%RC / %WC" value="%SHARE"/>
+    <condition rel="has round amount share" subject="TM Policy" object="%MINSHARE"/>
+    <condition expression="%SHARE is greater than or equal to %MINSHARE"/>
+    <condition expression="countRelationshipInstances(%S,'has new overseas counterparty txn',*) is greater than or equal to 1" alt="Round wires include unrecognised overseas counterparties"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 4 - DEFEATERS                                              -->
+  <!-- Benign explanations that suppress false positives via the        -->
+  <!-- suppression map. Deliberate-conduct typologies are absent from   -->
+  <!-- the map so they can never be suppressed.                         -->
+  <!-- ================================================================ -->
+
+  <!-- The salary defeater only fires when salary-band credits dominate  -->
+  <!-- the inflows: salary explains the salary credit, never an excess   -->
+  <!-- sitting alongside it.                                             -->
+  <relinst type="has benign explanation" object="Salary Pattern" cf="95" name="Defeater - inflows are dominated by the declared salary pattern">
+    <condition expression="countRelationshipInstances(%S,'has salary credit txn',*) is greater than or equal to 1" alt="At least one credit matches the declared employer and salary band"/>
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition expression="%IN is greater than 0"/>
+    <condition expression="sumObjects(%S,'has salary credit value item',*)" value="%SV"/>
+    <condition rel="has known coverage share" subject="TM Policy" object="%SHARE"/>
+    <condition expression="%IN * %SHARE" value="%LIM"/>
+    <condition expression="%SV is greater than or equal to %LIM" alt="Salary pattern credits account for the bulk of inflows"/>
+  </relinst>
+
+  <relinst type="has benign explanation" object="Known Counterparty Coverage" cf="90" name="Defeater - flows dominated by recognised counterparties">
+    <condition expression="countRelationshipInstances(%S,'has call for action txn',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has enhanced monitoring txn',*) is equal to 0"/>
+    <condition rel="has known coverage ratio" subject="%S" object="%COV"/>
+    <condition rel="has known coverage share" subject="TM Policy" object="%MIN"/>
+    <condition expression="%COV is greater than or equal to %MIN" alt="Recognised counterparties account for the bulk of flow value"/>
+  </relinst>
+
+  <relinst type="has benign explanation" object="Declared Seasonal Trade" cf="90" name="Defeater - declared seasonal trading peak">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has customer type" subject="%CUST" object="%CT"/>
+    <condition expression="%CT is not equal to 'Personal'"/>
+    <condition rel="has account age months" subject="%CUST" object="%AGE"/>
+    <condition rel="has seasonal precedent months" subject="TM Policy" object="%PREC"/>
+    <condition expression="%AGE is greater than or equal to %PREC" alt="Seasonality requires at least one comparable prior season"/>
+    <condition rel="has last activity date" subject="%S" object="%LD"/>
+    <condition expression="monthOfYear(%LD)" value="%M"/>
+    <condition expression="countRelationshipInstances(%CUST,'has declared seasonal peak month',%M) is greater than or equal to 1" alt="Activity falls in a declared seasonal peak month"/>
+    <condition rel="has expected turnover multiple" subject="%S" object="%MULT"/>
+    <condition rel="has seasonal allowance multiple" subject="TM Policy" object="%ALLOW"/>
+    <condition expression="%MULT is less than or equal to %ALLOW" alt="Uplift is within the seasonal allowance"/>
+  </relinst>
+
+  <relinst type="has benign explanation" cf="92" name="Defeater - documented explanation on file">
+    <condition rel="has documented explanation type" subject="%S" object="%O"/>
+    <condition rel="is documented explanation type" subject="%O" object="%DT" weight="1"/>
+    <condition expression="%DT is equal to true" weight="1" alt="Only recognised case-file explanation types are accepted"/>
+  </relinst>
+
+  <!-- Suppression and net signals. Suppression is voided entirely when -->
+  <!-- any defeater override holds (fraud, sanctions, call for action). -->
+  <relinst type="has suppressed typology" cf="100" name="Benign explanation suppresses a typology">
+    <condition expression="countRelationshipInstances(%S,'has defeater override',*) is equal to 0" weight="1" alt="No global override voids benign explanations"/>
+    <condition rel="has benign explanation" subject="%S" object="%E"/>
+    <condition rel="explanation suppresses typology" subject="%E" object="%O" weight="1"/>
+  </relinst>
+
+  <relinst type="has net strong typology" cf="100" name="Strong signal that survives suppression">
+    <condition rel="has strong typology signal" subject="%S" object="%O"/>
+    <condition expression="countRelationshipInstances(%S,'has suppressed typology',%O) is equal to 0" weight="1" alt="No benign explanation suppresses this typology"/>
+  </relinst>
+
+  <relinst type="has net moderate typology" cf="100" name="Moderate signal that survives suppression and is not already strong">
+    <condition rel="has moderate typology signal" subject="%S" object="%O"/>
+    <condition expression="countRelationshipInstances(%S,'has suppressed typology',%O) is equal to 0" weight="1" alt="No benign explanation suppresses this typology"/>
+    <condition expression="countRelationshipInstances(%S,'has strong typology signal',%O) is equal to 0" weight="1" alt="Counted as moderate only where no strong signal exists"/>
+  </relinst>
+
+  <relinst type="exhibits typology" cf="100" name="Alert exhibits a surviving strong typology">
+    <condition rel="has net strong typology" subject="%S" object="%O"/>
+  </relinst>
+
+  <relinst type="exhibits typology" cf="100" name="Alert exhibits a surviving moderate typology">
+    <condition rel="has net moderate typology" subject="%S" object="%O"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 5 - CANDIDATE OUTCOMES                                     -->
+  <!-- Graded candidates; the precedence ladder below selects exactly  -->
+  <!-- one final outcome. Closing requires transaction data present     -->
+  <!-- and a known risk rating so unknown context can never close.      -->
+  <!-- ================================================================ -->
+
+  <relinst type="has candidate outcome" object="Recommend SAR" cf="100" name="SAR - multiple strong typologies corroborate">
+    <condition rel="has net strong typology" subject="%S" object="%T"/>
+    <condition expression="countRelationshipInstances(%S,'has net strong typology',*) is greater than or equal to 2" weight="1" alt="Two or more surviving strong typologies"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Recommend SAR" cf="100" name="SAR - strong typology corroborated by a moderate typology">
+    <condition rel="has net strong typology" subject="%S" object="%T"/>
+    <condition expression="countRelationshipInstances(%S,'has net moderate typology',*) is greater than or equal to 1" weight="1" alt="A surviving moderate typology corroborates the strong signal"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Recommend SAR" cf="100" name="SAR - strong typology on a high risk context customer">
+    <condition rel="has net strong typology" subject="%S" object="%T"/>
+    <condition rel="concerns customer" subject="%S" object="%CUST" weight="1"/>
+    <condition rel="has customer risk tier" subject="%CUST" object="High Risk Context" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Recommend SAR" cf="100" name="SAR - strong typology recurs after a prior SAR">
+    <condition rel="has net strong typology" subject="%S" object="%T"/>
+    <condition rel="concerns customer" subject="%S" object="%CUST" weight="1"/>
+    <condition rel="has prior sar filed" subject="%CUST" object="%P" weight="1"/>
+    <condition expression="%P is equal to true" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Recommend SAR" cf="95" name="SAR - moderate typology recurs after a prior SAR">
+    <condition rel="has net moderate typology" subject="%S" object="%T"/>
+    <condition rel="concerns customer" subject="%S" object="%CUST" weight="1"/>
+    <condition rel="has prior sar filed" subject="%CUST" object="%P" weight="1"/>
+    <condition expression="%P is equal to true" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Recommend SAR" cf="100" name="SAR - directly reportable typology with strong evidence">
+    <condition rel="has net strong typology" subject="%S" object="%T"/>
+    <condition rel="is directly reportable typology" subject="%T" object="%DR" weight="1"/>
+    <condition expression="%DR is equal to true" weight="1" alt="Strong evidence of a directly reportable typology meets the reasonable grounds standard"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Escalate to Investigation" cf="100" name="Escalate - a single uncorroborated strong typology">
+    <condition rel="has net strong typology" subject="%S" object="%T"/>
+    <condition expression="countRelationshipInstances(%S,'has net strong typology',*) is equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has net moderate typology',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Escalate to Investigation" cf="100" name="Escalate - multiple moderate typologies">
+    <condition rel="has net moderate typology" subject="%S" object="%T"/>
+    <condition expression="countRelationshipInstances(%S,'has net moderate typology',*) is greater than or equal to 2" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Escalate to Investigation" cf="100" name="Escalate - moderate typology on a politically exposed person">
+    <condition rel="has net moderate typology" subject="%S" object="%T"/>
+    <condition rel="concerns customer" subject="%S" object="%CUST" weight="1"/>
+    <condition rel="is politically exposed" subject="%CUST" object="%PEP" weight="1"/>
+    <condition expression="%PEP is equal to true" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Escalate to Investigation" cf="100" name="Escalate - moderate typology with credible financial crime media">
+    <condition rel="has net moderate typology" subject="%S" object="%T"/>
+    <condition rel="concerns customer" subject="%S" object="%CUST" weight="1"/>
+    <condition rel="has credible financial crime media" subject="%CUST" object="%F" weight="1"/>
+    <condition expression="%F is equal to true" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Escalate to Investigation" cf="100" name="Escalate - moderate typology on a high risk context customer">
+    <condition rel="has net moderate typology" subject="%S" object="%T"/>
+    <condition rel="concerns customer" subject="%S" object="%CUST" weight="1"/>
+    <condition rel="has customer risk tier" subject="%CUST" object="High Risk Context" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Escalate to Investigation" cf="100" name="Escalate - unresolved sanctions match routes to the sanctions process">
+    <condition rel="has unresolved sanctions match" subject="%S" object="%SM"/>
+    <condition expression="%SM is equal to true" weight="1" alt="Freeze and OFSI reporting run in the sanctions process outside this model"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Escalate to Investigation" cf="100" name="Escalate - fraud database marker on the customer">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has fraud database marker" subject="%CUST" object="%F" weight="1"/>
+    <condition expression="%F is equal to true" weight="1" alt="A fraud database marker routes the alert to investigation regardless of derived signals"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Escalate to Investigation" cf="90" name="Escalate - staff raised concern binds per K Ltd">
+    <condition rel="has alert source" subject="%S" object="Staff Raised"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Request Information" cf="100" name="RFI - a single unexplained moderate anomaly">
+    <condition rel="has net moderate typology" subject="%S" object="%T"/>
+    <condition expression="countRelationshipInstances(%S,'has net moderate typology',*) is equal to 1" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has net strong typology',*) is equal to 0" weight="1"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Close as False Positive" cf="95" name="Close - all indicators carry benign explanations">
+    <condition rel="has benign explanation" subject="%S" object="%E"/>
+    <condition rel="concerns customer" subject="%S" object="%CUST" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has closure block',*) is equal to 0" weight="1" alt="No condition precludes closure"/>
+    <condition expression="countRelationshipInstances(%S,'has alerted transaction',*) is greater than or equal to 1" weight="1" alt="Transaction data is present"/>
+    <condition expression="countRelationshipInstances(%CUST,'has risk rating',*) is greater than or equal to 1" weight="1" alt="The onboarding risk rating is known"/>
+    <condition rel="has customer risk tier" subject="%CUST" object="%TIER" weight="1"/>
+    <condition expression="%TIER is not equal to 'High Risk Context'" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has net strong typology',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has net moderate typology',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%CUST,'has expected monthly turnover',*) is greater than or equal to 1" weight="1" alt="An expected activity profile must exist to be consistent with"/>
+    <condition expression="countRelationshipInstances(%CUST,'is politically exposed',*) is greater than or equal to 1" weight="1" alt="PEP screening result must be known"/>
+    <condition expression="countRelationshipInstances(%CUST,'has adverse media relevance',*) is greater than or equal to 1" weight="1" alt="Adverse media screening result must be known"/>
+    <condition expression="countRelationshipInstances(%S,'has inbound fraud report match',*) is greater than or equal to 1" weight="1" alt="Fraud report screening must be known"/>
+    <condition expression="countRelationshipInstances(%S,'has unresolved sanctions match',*) is greater than or equal to 1" weight="1" alt="Sanctions screening must be known"/>
+    <condition expression="countRelationshipInstances(%CUST,'has fraud database marker',*) is greater than or equal to 1" weight="1" alt="Fraud database screening must be known"/>
+    <condition expression="countRelationshipInstances(%CUST,'has prior sar filed',*) is greater than or equal to 1" weight="1" alt="Prior SAR history must be known"/>
+    <condition expression="countRelationshipInstances(%CUST,'has months since kyc refresh',*) is greater than or equal to 1" weight="1" alt="KYC recency must be known"/>
+  </relinst>
+
+  <relinst type="has candidate outcome" object="Close as False Positive" cf="82" name="Close - no indicators and activity consistent with profile">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition expression="countRelationshipInstances(%S,'has closure block',*) is equal to 0" alt="No condition precludes closure"/>
+    <condition expression="countRelationshipInstances(%S,'has alerted transaction',*) is greater than or equal to 1" alt="Transaction data is present"/>
+    <condition expression="countRelationshipInstances(%CUST,'has risk rating',*) is greater than or equal to 1" alt="The onboarding risk rating is known"/>
+    <condition rel="has customer risk tier" subject="%CUST" object="%TIER"/>
+    <condition expression="%TIER is not equal to 'High Risk Context'"/>
+    <condition expression="countRelationshipInstances(%S,'has strong typology signal',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has moderate typology signal',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has benign explanation',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%CUST,'has expected monthly turnover',*) is greater than or equal to 1" alt="An expected activity profile must exist to be consistent with"/>
+    <condition expression="countRelationshipInstances(%CUST,'is politically exposed',*) is greater than or equal to 1" alt="PEP screening result must be known"/>
+    <condition expression="countRelationshipInstances(%CUST,'has adverse media relevance',*) is greater than or equal to 1" alt="Adverse media screening result must be known"/>
+    <condition expression="countRelationshipInstances(%S,'has inbound fraud report match',*) is greater than or equal to 1" alt="Fraud report screening must be known"/>
+    <condition expression="countRelationshipInstances(%S,'has unresolved sanctions match',*) is greater than or equal to 1" alt="Sanctions screening must be known"/>
+    <condition expression="countRelationshipInstances(%CUST,'has fraud database marker',*) is greater than or equal to 1" alt="Fraud database screening must be known"/>
+    <condition expression="countRelationshipInstances(%CUST,'has prior sar filed',*) is greater than or equal to 1" alt="Prior SAR history must be known"/>
+    <condition expression="countRelationshipInstances(%CUST,'has months since kyc refresh',*) is greater than or equal to 1" alt="KYC recency must be known"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 6 - PRECEDENCE LADDER                                      -->
+  <!-- SAR beats Escalate beats RFI beats Close; anything unresolved    -->
+  <!-- defaults to Request Information. Count gates lead each rule so   -->
+  <!-- exactly one final outcome is produced.                           -->
+  <!-- ================================================================ -->
+
+  <relinst type="has sar candidate" object="true" cf="100" name="Flag - SAR candidate exists">
+    <condition rel="has candidate outcome" subject="%S" object="Recommend SAR"/>
+  </relinst>
+
+  <relinst type="has escalate candidate" object="true" cf="100" name="Flag - escalate candidate exists">
+    <condition rel="has candidate outcome" subject="%S" object="Escalate to Investigation"/>
+  </relinst>
+
+  <relinst type="has rfi candidate" object="true" cf="100" name="Flag - RFI candidate exists">
+    <condition rel="has candidate outcome" subject="%S" object="Request Information"/>
+  </relinst>
+
+  <relinst type="has close candidate" object="true" cf="100" name="Flag - close candidate exists">
+    <condition rel="has candidate outcome" subject="%S" object="Close as False Positive"/>
+  </relinst>
+
+  <relinst type="has adjudication outcome" object="Recommend SAR" cf="100" name="Final - SAR recommendation takes precedence">
+    <condition rel="has candidate outcome" subject="%S" object="Recommend SAR"/>
+  </relinst>
+
+  <relinst type="has adjudication outcome" object="Escalate to Investigation" cf="100" name="Final - escalate when no SAR candidate">
+    <condition expression="countRelationshipInstances(%S,'has sar candidate',*) is equal to 0" weight="1"/>
+    <condition rel="has candidate outcome" subject="%S" object="Escalate to Investigation"/>
+  </relinst>
+
+  <relinst type="has adjudication outcome" object="Request Information" cf="100" name="Final - request information when no SAR or escalation candidate">
+    <condition expression="countRelationshipInstances(%S,'has sar candidate',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has escalate candidate',*) is equal to 0" weight="1"/>
+    <condition rel="has candidate outcome" subject="%S" object="Request Information"/>
+  </relinst>
+
+  <relinst type="has adjudication outcome" object="Close as False Positive" cf="100" name="Final - close when no higher candidate">
+    <condition expression="countRelationshipInstances(%S,'has sar candidate',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has escalate candidate',*) is equal to 0" weight="1"/>
+    <condition expression="countRelationshipInstances(%S,'has rfi candidate',*) is equal to 0" weight="1"/>
+    <condition rel="has candidate outcome" subject="%S" object="Close as False Positive"/>
+  </relinst>
+
+  <relinst type="has adjudication outcome" object="Request Information" cf="65" name="Final - default to request information when nothing resolves">
+    <condition expression="countRelationshipInstances(%S,'has sar candidate',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has escalate candidate',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has rfi candidate',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has close candidate',*) is equal to 0" alt="No candidate outcome could be derived from the available data"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 7 - CONTRIBUTING EVIDENCE                                  -->
+  <!-- Evidence lines bind the derived facts themselves so they can     -->
+  <!-- never drift from the rules they describe. Raw indicators are     -->
+  <!-- evidenced even when suppressed, alongside a set-aside note, so   -->
+  <!-- the audit trail shows the full reasoning per FCA expectations.   -->
+  <!-- ================================================================ -->
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - structuring pattern">
+    <condition rel="has strong typology signal" subject="%S" object="Structuring"/>
+    <condition rel="has near threshold cash count" subject="%S" object="%N"/>
+    <condition rel="has near threshold span days" subject="%S" object="%SP"/>
+    <condition rel="has total cash deposit value" subject="%S" object="%CV"/>
+    <condition expression="'Structuring pattern: ' + %N + ' cash deposits just below the reporting threshold within ' + %SP + ' days, cash total GBP ' + %CV" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - repeated near threshold deposits">
+    <condition rel="has moderate typology signal" subject="%S" object="Structuring"/>
+    <condition expression="countRelationshipInstances(%S,'has strong typology signal','Structuring') is equal to 0"/>
+    <condition rel="has near threshold cash count" subject="%S" object="%N"/>
+    <condition rel="has near threshold span days" subject="%S" object="%SP"/>
+    <condition expression="'Repeated near threshold cash deposits: ' + %N + ' within ' + %SP + ' days'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - rapid pass through">
+    <condition rel="has strong typology signal" subject="%S" object="Rapid Movement"/>
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition rel="has total outbound value" subject="%S" object="%OUT"/>
+    <condition rel="has outflow ratio" subject="%S" object="%R"/>
+    <condition expression="round(%R,2)" value="%RR"/>
+    <condition rel="has pass through days" subject="%S" object="%D"/>
+    <condition expression="'Rapid movement: GBP ' + %OUT + ' moved out against GBP ' + %IN + ' received, outflow ratio ' + %RR + ' within ' + %D + ' days'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - substantial pass through">
+    <condition rel="has moderate typology signal" subject="%S" object="Rapid Movement"/>
+    <condition expression="countRelationshipInstances(%S,'has strong typology signal','Rapid Movement') is equal to 0"/>
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition rel="has total outbound value" subject="%S" object="%OUT"/>
+    <condition rel="has outflow ratio" subject="%S" object="%R"/>
+    <condition expression="round(%R,2)" value="%RR"/>
+    <condition rel="has pass through days" subject="%S" object="%D"/>
+    <condition expression="'Substantial pass through: GBP ' + %OUT + ' out against GBP ' + %IN + ' in, ratio ' + %RR + ' over ' + %D + ' days'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - mule pattern strong">
+    <condition rel="has strong typology signal" subject="%S" object="Money Mule Pattern"/>
+    <condition rel="has third party payer count" subject="%S" object="%N"/>
+    <condition rel="has mule payer count" subject="TM Policy" object="%MIN" weight="1"/>
+    <condition expression="%N is greater than or equal to %MIN" weight="1" alt="Dispersed payer narrative only where dispersion actually occurred"/>
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition rel="has pass through days" subject="%S" object="%D"/>
+    <condition expression="'Mule pattern: ' + %N + ' unrecognised payers funded GBP ' + %IN + ' into a new or reactivated account, moved on within ' + %D + ' days'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - mule pattern moderate">
+    <condition rel="has moderate typology signal" subject="%S" object="Money Mule Pattern"/>
+    <condition expression="countRelationshipInstances(%S,'has strong typology signal','Money Mule Pattern') is equal to 0"/>
+    <condition rel="has third party payer count" subject="%S" object="%N"/>
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition rel="has pass through days" subject="%S" object="%D"/>
+    <condition expression="'Dispersed payer pattern: ' + %N + ' unrecognised payers funded GBP ' + %IN + ', moved on within ' + %D + ' days'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - severe expected activity mismatch">
+    <condition rel="has strong typology signal" subject="%S" object="Expected Activity Mismatch"/>
+    <condition rel="has expected turnover multiple" subject="%S" object="%MULT"/>
+    <condition expression="round(%MULT,1)" value="%RM"/>
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition expression="'Severe profile mismatch: inflows of GBP ' + %IN + ' are ' + %RM + ' times the expected monthly turnover'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - expected activity mismatch">
+    <condition rel="has moderate typology signal" subject="%S" object="Expected Activity Mismatch"/>
+    <condition expression="countRelationshipInstances(%S,'has strong typology signal','Expected Activity Mismatch') is equal to 0"/>
+    <condition rel="has expected turnover multiple" subject="%S" object="%MULT"/>
+    <condition expression="round(%MULT,1)" value="%RM"/>
+    <condition rel="has total inbound value" subject="%S" object="%IN"/>
+    <condition expression="'Profile mismatch: inflows of GBP ' + %IN + ' are ' + %RM + ' times the expected monthly turnover'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - call for action jurisdiction exposure">
+    <condition rel="has strong typology signal" subject="%S" object="High Risk Jurisdiction Exposure"/>
+    <condition expression="countRelationshipInstances(%S,'has call for action txn',*)" value="%N"/>
+    <condition expression="%N is greater than or equal to 1"/>
+    <condition expression="'High risk jurisdiction: ' + %N + ' transactions with FATF call for action jurisdictions'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - enhanced monitoring jurisdiction exposure">
+    <condition rel="has moderate typology signal" subject="%S" object="High Risk Jurisdiction Exposure"/>
+    <condition expression="countRelationshipInstances(%S,'has strong typology signal','High Risk Jurisdiction Exposure') is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has enhanced monitoring txn',*)" value="%N"/>
+    <condition expression="'Jurisdiction exposure: ' + %N + ' transactions with FATF enhanced monitoring jurisdictions'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - cash into a declared non cash business">
+    <condition rel="has strong typology signal" subject="%S" object="Cash Intensity Anomaly"/>
+    <condition rel="has cash inflow percent" subject="%S" object="%PCT"/>
+    <condition expression="round(%PCT,0)" value="%RP"/>
+    <condition rel="has total cash deposit value" subject="%S" object="%CV"/>
+    <condition expression="'Cash anomaly: ' + %RP + ' percent of inflows in cash, GBP ' + %CV + ', against a declared non cash profile'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - cash share above declared level">
+    <condition rel="has moderate typology signal" subject="%S" object="Cash Intensity Anomaly"/>
+    <condition expression="countRelationshipInstances(%S,'has strong typology signal','Cash Intensity Anomaly') is equal to 0"/>
+    <condition rel="has cash inflow percent" subject="%S" object="%PCT"/>
+    <condition expression="round(%PCT,0)" value="%RP"/>
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has declared cash intensity percent" subject="%CUST" object="%DECL"/>
+    <condition expression="'Cash intensity: ' + %RP + ' percent of inflows in cash against a declared ' + %DECL + ' percent'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - round amount wires">
+    <condition rel="has moderate typology signal" subject="%S" object="Round Amount Corporate Flows"/>
+    <condition expression="countRelationshipInstances(%S,'has round outbound wire txn',*)" value="%RC"/>
+    <condition expression="countRelationshipInstances(%S,'has outbound wire txn',*)" value="%WC"/>
+    <condition expression="countRelationshipInstances(%S,'has new overseas counterparty txn',*)" value="%NC"/>
+    <condition expression="'Round amount flows: ' + %RC + ' of ' + %WC + ' outbound wires are exact round amounts including ' + %NC + ' to unrecognised overseas counterparties'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - salary pattern detail">
+    <condition rel="has benign explanation" subject="%S" object="Salary Pattern"/>
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has salary payer" subject="%CUST" object="%P"/>
+    <condition expression="'Credits match the declared salary pattern from ' + %P" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - benign explanation identified">
+    <condition rel="has benign explanation" subject="%S" object="%E"/>
+    <condition expression="'Benign explanation identified: ' + %E" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - indicator set aside by explanation">
+    <condition rel="has suppressed typology" subject="%S" object="%T"/>
+    <condition rel="has benign explanation" subject="%S" object="%E"/>
+    <condition rel="explanation suppresses typology" subject="%E" object="%T"/>
+    <condition expression="countRelationshipInstances(%S,'has strong typology signal',%T)" value="%A"/>
+    <condition expression="countRelationshipInstances(%S,'has moderate typology signal',%T)" value="%B"/>
+    <condition expression="%A + %B" value="%N"/>
+    <condition expression="%N is greater than or equal to 1" alt="Only note set-asides for indicators that actually fired"/>
+    <condition expression="'Indicator set aside: ' + %T + ' explained by ' + %E" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - customer risk context factor">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has context risk factor" subject="%CUST" object="%F"/>
+    <condition expression="'Customer risk context: ' + %F" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - customer risk tier">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition expression="countRelationshipInstances(%CUST,'has risk rating',*) is greater than or equal to 1" alt="Tier is only cited where the base rating is known"/>
+    <condition rel="has customer risk tier" subject="%CUST" object="%TIER"/>
+    <condition rel="has context risk score" subject="%CUST" object="%SC"/>
+    <condition expression="'Customer assessed as ' + %TIER + ' with context score ' + %SC" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - generating monitoring rule">
+    <condition rel="has alert type" subject="%S" object="%AT"/>
+    <condition expression="'Alert generated by monitoring rule: ' + %AT" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - inbound fraud report">
+    <condition rel="has inbound fraud report match" subject="%S" object="%F"/>
+    <condition expression="%F is equal to true"/>
+    <condition expression="'Inbound funds matched to an interbank fraud report; treated as suspected criminal proceeds'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - closure precluded">
+    <condition rel="has closure block" subject="%S" object="%B"/>
+    <condition expression="'Closure precluded: ' + %B" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - benign explanations disregarded">
+    <condition rel="has defeater override" subject="%S" object="%B"/>
+    <condition expression="countRelationshipInstances(%S,'has benign explanation',*) is greater than or equal to 1" alt="Only noted where an explanation existed to disregard"/>
+    <condition expression="'Benign explanations disregarded due to: ' + %B" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - no indicators found">
+    <condition rel="has adjudication outcome" subject="%S" object="Close as False Positive"/>
+    <condition expression="countRelationshipInstances(%S,'has strong typology signal',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has moderate typology signal',*) is equal to 0"/>
+    <condition expression="'No typology indicators identified; activity is consistent with the known customer profile'" value="%O"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - insufficient data note">
+    <condition rel="has adjudication outcome" subject="%S" object="Request Information"/>
+    <condition expression="countRelationshipInstances(%S,'has sar candidate',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has escalate candidate',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has rfi candidate',*) is equal to 0"/>
+    <condition expression="countRelationshipInstances(%S,'has close candidate',*) is equal to 0"/>
+    <condition expression="'Alert could not be resolved on the available data; further information is required before an adjudication can be reached'" value="%O"/>
+  </relinst>
+
+  <!-- ================================================================ -->
+  <!-- LAYER 8 - WRITTEN RATIONALE AND NEXT STEPS                       -->
+  <!-- The rationale binds the final outcome fact and joins the         -->
+  <!-- evidence set, citing the governing standard.                     -->
+  <!-- ================================================================ -->
+
+  <relinst type="has adjudication rationale" cf="100" name="Rationale - recommend SAR">
+    <condition rel="has adjudication outcome" subject="%S" object="Recommend SAR"/>
+    <condition expression="countRelationshipInstances(%S,'has contributing evidence',*) is greater than or equal to 1" weight="1"/>
+    <condition expression="joinObjects(%S,'has contributing evidence',*)" value="%EV" weight="1"/>
+    <condition expression="'Recommend SAR: the indicators meet the reasonable grounds to suspect standard in POCA 2002 s.330, where suspicion need only be more than fanciful per R v Da Silva. Refer to the nominated officer as soon as practicable and do not alert the customer, per the s.333A tipping off prohibition. Evidence: ' + %EV" value="%O" weight="1"/>
+  </relinst>
+
+  <relinst type="has adjudication rationale" cf="100" name="Rationale - escalate to investigation">
+    <condition rel="has adjudication outcome" subject="%S" object="Escalate to Investigation"/>
+    <condition expression="countRelationshipInstances(%S,'has contributing evidence',*) is greater than or equal to 1" weight="1"/>
+    <condition expression="joinObjects(%S,'has contributing evidence',*)" value="%EV" weight="1"/>
+    <condition expression="'Escalate to investigation: the pattern exceeds what JMLSG Part I treats as merely unusual and warrants enhanced scrutiny under MLR 2017 reg 28(11) and reg 33 before a reporting decision is made. Evidence: ' + %EV" value="%O" weight="1"/>
+  </relinst>
+
+  <relinst type="has adjudication rationale" cf="100" name="Rationale - request information">
+    <condition rel="has adjudication outcome" subject="%S" object="Request Information"/>
+    <condition expression="countRelationshipInstances(%S,'has contributing evidence',*) is greater than or equal to 1" weight="1"/>
+    <condition expression="joinObjects(%S,'has contributing evidence',*)" value="%EV" weight="1"/>
+    <condition expression="'Request information: the activity is unusual but does not yet meet the suspicion threshold, consistent with the JMLSG Part I distinction between unusual and suspicious. Make neutral enquiries of the customer without disclosing that a monitoring alert exists, mindful of POCA s.333A. Evidence: ' + %EV" value="%O" weight="1"/>
+  </relinst>
+
+  <relinst type="has adjudication rationale" cf="100" name="Rationale - close as false positive">
+    <condition rel="has adjudication outcome" subject="%S" object="Close as False Positive"/>
+    <condition expression="countRelationshipInstances(%S,'has contributing evidence',*) is greater than or equal to 1" weight="1"/>
+    <condition expression="joinObjects(%S,'has contributing evidence',*)" value="%EV" weight="1"/>
+    <condition expression="'Close as false positive: once benign patterns are applied the activity is consistent with the customer profile and the MLR 2017 reg 28(11) scrutiny duty is satisfied. The closure rationale is documented in line with FCA Financial Crime Guide expectations. Evidence: ' + %EV" value="%O" weight="1"/>
+  </relinst>
+
+  <relinst type="has recommended next step" object="File SAR With Nominated Officer" cf="100" name="Next step - SAR">
+    <condition rel="has adjudication outcome" subject="%S" object="Recommend SAR"/>
+  </relinst>
+
+  <relinst type="has recommended next step" object="Assign To Investigations Queue" cf="100" name="Next step - investigation">
+    <condition rel="has adjudication outcome" subject="%S" object="Escalate to Investigation"/>
+  </relinst>
+
+  <relinst type="has recommended next step" object="Issue Neutral Customer Enquiry" cf="100" name="Next step - request information">
+    <condition rel="has adjudication outcome" subject="%S" object="Request Information"/>
+  </relinst>
+
+  <relinst type="has recommended next step" object="Close With Documented Rationale" cf="100" name="Next step - close">
+    <condition rel="has adjudication outcome" subject="%S" object="Close as False Positive"/>
+  </relinst>
+
+  <!-- Review routing: dispositions on PEPs, high risk contexts and SAR  -->
+  <!-- recommendations require a second, more senior, independent        -->
+  <!-- reviewer per MLR 2017 reg 35(5), FCA FG25/3 and FCG expectations. -->
+  <relinst type="has review requirement" object="Second Reviewer Required" cf="100" name="Review - politically exposed person disposition">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="is politically exposed" subject="%CUST" object="%PEP"/>
+    <condition expression="%PEP is equal to true"/>
+  </relinst>
+
+  <relinst type="has review requirement" object="Second Reviewer Required" cf="100" name="Review - high risk context disposition">
+    <condition rel="concerns customer" subject="%S" object="%CUST"/>
+    <condition rel="has customer risk tier" subject="%CUST" object="High Risk Context"/>
+  </relinst>
+
+  <relinst type="has review requirement" object="Second Reviewer Required" cf="100" name="Review - SAR recommendation">
+    <condition rel="has adjudication outcome" subject="%S" object="Recommend SAR"/>
+  </relinst>
+
+  <relinst type="has contributing evidence" cf="100" name="Evidence - second reviewer routing">
+    <condition rel="has review requirement" subject="%S" object="%RR"/>
+    <condition expression="'Routing: ' + %RR + ' before the disposition is actioned'" value="%O"/>
+  </relinst>
+
+</rbl:kb>

@@ -1,0 +1,929 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rbl:kb xmlns:rbl="http://rbl.io/schema/RBLang">
+
+<!-- ================================================================== -->
+<!-- DOCUMENT EXAMINATION, THREE-WAY MATCH (Purchase Order / Invoice /  -->
+<!-- Delivery Note). Rainbird-owned teaching example.                   -->
+<!--                                                                    -->
+<!-- Demonstrates the generic document-examination architecture:        -->
+<!-- an EAV (entity-attribute-value) meta-model where the ontology      -->
+<!-- never names a specific business field; documents, fields and       -->
+<!-- values arrive as injected instances. All rels are askable none:    -->
+<!-- this is an injection-only graph for headless API use. Checks are   -->
+<!-- exposed as requirement-numbered rels grouped into module buckets   -->
+<!-- with a run-all umbrella. Findings are delimited positional         -->
+<!-- records: CODE;document;rulebook;message;label;expected;label;      -->
+<!-- actual;Status where Status is Discrepant, Clean or Information.    -->
+<!-- Injection shape per case: one Case instance, Document instances    -->
+<!-- linked by presented in, document type and has ordinal facts, Field -->
+<!-- instances linked by contains fields, is field type, is data type,  -->
+<!-- typed value projections and optional table row facts.              -->
+<!-- ================================================================== -->
+
+  <!-- ============================ concepts ========================== -->
+  <concept name="Case" type="string"/>
+  <concept name="Document" type="string"/>
+  <concept name="Document Type" type="string"/>
+  <concept name="Record Ordinal" type="number"/>
+  <concept name="Field" type="string"/>
+  <concept name="Field Type" type="string"/>
+  <concept name="Data Type" type="string"/>
+  <concept name="Text Value" type="string"/>
+  <concept name="Number Value" type="number"/>
+  <concept name="Date Value" type="date"/>
+  <concept name="Truth Value" type="truth"/>
+  <concept name="Line Row" type="string"/>
+  <concept name="Unique Document Key" type="string"/>
+  <concept name="Unit Code" type="string"/>
+  <concept name="Examination Policy" type="string"/>
+  <concept name="Policy Number" type="number"/>
+  <concept name="Vocabulary Pattern" type="string"/>
+  <concept name="Structure Findings" type="string"/>
+  <concept name="Amount Findings" type="string"/>
+  <concept name="Party Findings" type="string"/>
+  <concept name="Date Findings" type="string"/>
+  <concept name="Content Findings" type="string"/>
+  <concept name="Overall Findings" type="string"/>
+  <concept name="Excluded Flag" type="truth"/>
+  <concept name="Report Column" type="string"/>
+  <concept name="Column Order" type="number"/>
+
+  <!-- ======================= relationships ========================== -->
+  <!-- EAV meta-model layer. Every rel is askable none: facts arrive    -->
+  <!-- only by injection or inference, never by asking a user.          -->
+  <rel name="presented in" subject="Document" object="Case" askable="none"/>
+  <rel name="document type" subject="Document" object="Document Type" askable="none"/>
+  <rel name="has ordinal" subject="Document" object="Record Ordinal" askable="none"/>
+  <rel name="contains fields" subject="Document" object="Field" plural="true" askable="none"/>
+  <rel name="is field type" subject="Field" object="Field Type" askable="none"/>
+  <rel name="is data type" subject="Field" object="Data Type" askable="none"/>
+  <rel name="text value" subject="Field" object="Text Value" askable="none"/>
+  <rel name="number value" subject="Field" object="Number Value" askable="none"/>
+  <rel name="date value" subject="Field" object="Date Value" askable="none"/>
+  <rel name="truth value" subject="Field" object="Truth Value" askable="none"/>
+  <rel name="table row" subject="Field" object="Line Row" askable="none"/>
+
+  <!-- Reified schema metadata: the expected data type of each field   -->
+  <!-- type is data, so one generic rule validates every field.        -->
+  <rel name="expected data type" subject="Field Type" object="Data Type" askable="none"/>
+  <rel name="field category" subject="Field Type" object="Field Type" askable="none"/>
+  <rel name="is excluded from generic checks" subject="Field Type" object="Excluded Flag" askable="none"/>
+  <rel name="report column order" subject="Report Column" object="Column Order" askable="none"/>
+
+  <!-- Group taxonomy over document types: groups are ordinary         -->
+  <!-- instances of Document Type, so requirements can target a group, -->
+  <!-- a leaf, or the sentinel ALL.                                    -->
+  <rel name="belongs to document group" subject="Document Type" object="Document Type" plural="true" askable="none"/>
+  <rel name="case has document group" subject="Case" object="Document Type" plural="true" askable="none"/>
+
+  <!-- Alias normalization table for unit codes. Canonical values map  -->
+  <!-- to themselves (identity rows) so one generic rule handles raw   -->
+  <!-- and already-canonical inputs identically.                       -->
+  <rel name="unit maps to" subject="Unit Code" object="Unit Code" askable="none"/>
+  <rel name="has normalised unit" subject="Field" object="Unit Code" askable="none"/>
+
+  <!-- Currency free-text normaliser output.                           -->
+  <rel name="has normalised currency" subject="Document" object="Text Value" askable="none"/>
+
+  <!-- Policy parameter facts: thresholds live as data on the policy   -->
+  <!-- instance, bound by conditions, never hard-coded in rules.       -->
+  <rel name="tolerance percent" subject="Examination Policy" object="Policy Number" askable="none"/>
+  <rel name="payment window days" subject="Examination Policy" object="Policy Number" askable="none"/>
+  <rel name="requires document group" subject="Examination Policy" object="Document Type" plural="true" askable="none"/>
+  <rel name="required text for" subject="Field Type" object="Text Value" askable="none"/>
+
+  <!-- Vocabulary-as-data for the title check: the alternation string  -->
+  <!-- is a fact, so matching vocabulary grows by adding data.         -->
+  <rel name="title keywords" subject="Document Type" object="Vocabulary Pattern" askable="none"/>
+
+  <!-- Dedup pipeline rels.                                            -->
+  <rel name="has document number" subject="Document" object="Text Value" askable="none"/>
+  <rel name="unique document key" subject="Case" object="Unique Document Key" plural="true" askable="none"/>
+  <rel name="key matches document" subject="Unique Document Key" object="Document" plural="true" askable="none"/>
+  <rel name="key ordinals" subject="Unique Document Key" object="Record Ordinal" plural="true" askable="none"/>
+  <rel name="first document for key" subject="Unique Document Key" object="Document" askable="none"/>
+  <rel name="is a copy of" subject="Document" object="Document" askable="none"/>
+
+  <!-- Line reconciliation link, possibly recorded in either           -->
+  <!-- direction by the upstream system.                               -->
+  <rel name="is linked to" subject="Field" object="Field" askable="none"/>
+
+  <!-- Case-split staging rels for the delivery summary: one rel per   -->
+  <!-- optional data shape, unified by an umbrella rel.                -->
+  <rel name="delivery summary with schedule" subject="Case" object="Date Findings" plural="true" askable="none"/>
+  <rel name="delivery summary no schedule" subject="Case" object="Date Findings" plural="true" askable="none"/>
+  <rel name="delivery summary" subject="Case" object="Date Findings" plural="true" askable="none"/>
+
+  <!-- Internal violation buckets (failure families) and the           -->
+  <!-- requirement-numbered check rels that expose them. Check rels    -->
+  <!-- copy violations and add a Clean record when the family is empty.-->
+  <rel name="structure violations" subject="Case" object="Structure Findings" plural="true" askable="none"/>
+  <rel name="duplicate violations" subject="Case" object="Structure Findings" plural="true" askable="none"/>
+  <rel name="line arithmetic violations" subject="Case" object="Amount Findings" plural="true" askable="none"/>
+  <rel name="totals violations" subject="Case" object="Amount Findings" plural="true" askable="none"/>
+  <rel name="reconciliation violations" subject="Case" object="Amount Findings" plural="true" askable="none"/>
+  <rel name="party violations" subject="Case" object="Party Findings" plural="true" askable="none"/>
+  <rel name="date violations" subject="Case" object="Date Findings" plural="true" askable="none"/>
+  <rel name="content violations" subject="Case" object="Content Findings" plural="true" askable="none"/>
+  <rel name="generic value violations" subject="Case" object="Content Findings" plural="true" askable="none"/>
+
+  <rel name="1.1 required documents check" subject="Case" object="Structure Findings" plural="true" askable="none"/>
+  <rel name="1.2 duplicate documents check" subject="Case" object="Structure Findings" plural="true" askable="none"/>
+  <rel name="2.1 line arithmetic check" subject="Case" object="Amount Findings" plural="true" askable="none"/>
+  <rel name="2.2 totals tolerance check" subject="Case" object="Amount Findings" plural="true" askable="none"/>
+  <rel name="2.3 line reconciliation check" subject="Case" object="Amount Findings" plural="true" askable="none"/>
+  <rel name="3.1 vendor consistency check" subject="Case" object="Party Findings" plural="true" askable="none"/>
+  <rel name="4.1 payment due check" subject="Case" object="Date Findings" plural="true" askable="none"/>
+  <rel name="4.2 delivery window check" subject="Case" object="Date Findings" plural="true" askable="none"/>
+  <rel name="5.1 content checks" subject="Case" object="Content Findings" plural="true" askable="none"/>
+  <rel name="run all checks" subject="Case" object="Overall Findings" plural="true" askable="none"/>
+
+  <!-- Helper derivations used by several modules.                     -->
+  <rel name="vendor name on" subject="Document" object="Text Value" askable="none"/>
+  <rel name="names in conflict" subject="Document" object="Document" askable="none"/>
+  <rel name="has document total" subject="Document" object="Number Value" askable="none"/>
+  <rel name="has base due date" subject="Document" object="Date Value" askable="none"/>
+  <rel name="has adjusted due date" subject="Document" object="Date Value" askable="none"/>
+  <rel name="is paid late" subject="Document" object="Truth Value" askable="none"/>
+  <rel name="payment date" subject="Document" object="Date Value" askable="none"/>
+  <rel name="has multiple deliveries" subject="Case" object="Truth Value" askable="none"/>
+  <rel name="delivery event dates" subject="Case" object="Date Value" plural="true" askable="none"/>
+  <rel name="final delivery date" subject="Case" object="Date Value" askable="none"/>
+  <rel name="delivery deadline days" subject="Examination Policy" object="Policy Number" askable="none"/>
+  <rel name="has paired quantity" subject="Field" object="Text Value" askable="none"/>
+  <rel name="has remark class" subject="Document" object="Text Value" askable="none"/>
+
+  <!-- ================== concept instances and facts ================= -->
+  <!-- Document type vocabulary. Groups are ordinary instances of the  -->
+  <!-- same concept as leaves; ALL is a sentinel universal group.      -->
+  <concinst name="Purchase Order" type="Document Type"/>
+  <concinst name="Invoice" type="Document Type"/>
+  <concinst name="Pro Forma Invoice" type="Document Type"/>
+  <concinst name="Delivery Note" type="Document Type"/>
+  <concinst name="Commercial Documents" type="Document Type"/>
+  <concinst name="Logistics Documents" type="Document Type"/>
+  <concinst name="ALL" type="Document Type"/>
+
+  <relinst type="belongs to document group" subject="Purchase Order" object="Commercial Documents"/>
+  <relinst type="belongs to document group" subject="Invoice" object="Commercial Documents"/>
+  <relinst type="belongs to document group" subject="Delivery Note" object="Logistics Documents"/>
+  <!-- Two-level chain: a leaf grouped under a value that is itself    -->
+  <!-- grouped elsewhere. Pro Forma Invoice joins the Invoice family   -->
+  <!-- with a single data row and inherits nothing else.               -->
+  <relinst type="belongs to document group" subject="Pro Forma Invoice" object="Invoice"/>
+
+  <!-- Field type vocabulary with compound-key naming: the category    -->
+  <!-- prefix is decomposed by the field category table so rules can   -->
+  <!-- join on the category alone or build companion keys.             -->
+  <concinst name="document-number" type="Field Type"/>
+  <concinst name="document-title" type="Field Type"/>
+  <concinst name="vendor-name" type="Field Type"/>
+  <concinst name="currency-text" type="Field Type"/>
+  <concinst name="amount-total" type="Field Type"/>
+  <concinst name="amount-tax" type="Field Type"/>
+  <concinst name="quantity" type="Field Type"/>
+  <concinst name="quantity-unit" type="Field Type"/>
+  <concinst name="unit-price" type="Field Type"/>
+  <concinst name="line-total" type="Field Type"/>
+  <concinst name="line-item-code" type="Field Type"/>
+  <concinst name="invoice-date" type="Field Type"/>
+  <concinst name="payment-terms-code" type="Field Type"/>
+  <concinst name="instruction-text" type="Field Type"/>
+  <concinst name="remark-text" type="Field Type"/>
+  <concinst name="signature-image" type="Field Type"/>
+  <concinst name="amount" type="Field Type"/>
+
+  <relinst type="field category" subject="amount-total" object="amount"/>
+  <relinst type="field category" subject="amount-tax" object="amount"/>
+  <relinst type="field category" subject="quantity" object="quantity"/>
+  <relinst type="field category" subject="quantity-unit" object="quantity-unit"/>
+
+  <!-- Reified data-type registry: type names are instances so rules   -->
+  <!-- can reason about them and route unmapped input to a catch-all.  -->
+  <concinst name="Text" type="Data Type"/>
+  <concinst name="Number" type="Data Type"/>
+  <concinst name="Date" type="Data Type"/>
+  <concinst name="Truth" type="Data Type"/>
+  <concinst name="Unmapped" type="Data Type"/>
+
+  <relinst type="expected data type" subject="document-number" object="Text"/>
+  <relinst type="expected data type" subject="document-title" object="Text"/>
+  <relinst type="expected data type" subject="vendor-name" object="Text"/>
+  <relinst type="expected data type" subject="currency-text" object="Text"/>
+  <relinst type="expected data type" subject="amount-total" object="Number"/>
+  <relinst type="expected data type" subject="amount-tax" object="Number"/>
+  <relinst type="expected data type" subject="quantity" object="Number"/>
+  <relinst type="expected data type" subject="quantity-unit" object="Text"/>
+  <relinst type="expected data type" subject="unit-price" object="Number"/>
+  <relinst type="expected data type" subject="line-total" object="Number"/>
+  <relinst type="expected data type" subject="line-item-code" object="Text"/>
+  <relinst type="expected data type" subject="invoice-date" object="Date"/>
+  <relinst type="expected data type" subject="payment-terms-code" object="Text"/>
+  <relinst type="expected data type" subject="instruction-text" object="Text"/>
+  <relinst type="expected data type" subject="remark-text" object="Text"/>
+
+  <!-- Exclusion registry: opting a field type out of the generic      -->
+  <!-- sweeps is a one-line data change, not a rule edit.              -->
+  <relinst type="is excluded from generic checks" subject="signature-image" object="true"/>
+
+  <!-- Dual-typed instance names: instance names are scoped PER        -->
+  <!-- CONCEPT, so the SAME name declared under a second concept lets  -->
+  <!-- one identifier participate in relationships of either           -->
+  <!-- vocabulary. Here amount-total and invoice-date are also Report  -->
+  <!-- Column instances carrying a display order.                      -->
+  <concinst name="amount-total" type="Report Column"/>
+  <concinst name="invoice-date" type="Report Column"/>
+  <relinst type="report column order" subject="amount-total" object="1"/>
+  <relinst type="report column order" subject="invoice-date" object="2"/>
+
+  <!-- Unit alias table WITH identity self-mapping rows. Without the   -->
+  <!-- identity rows the generic normalization rule silently fails     -->
+  <!-- for inputs that are already canonical.                          -->
+  <concinst name="EA" type="Unit Code"/>
+  <concinst name="EACH" type="Unit Code"/>
+  <concinst name="PC" type="Unit Code"/>
+  <concinst name="PCS" type="Unit Code"/>
+  <concinst name="PIECE" type="Unit Code"/>
+  <concinst name="KG" type="Unit Code"/>
+  <concinst name="KILO" type="Unit Code"/>
+  <concinst name="KILOGRAM" type="Unit Code"/>
+  <relinst type="unit maps to" subject="EA" object="EA"/>
+  <relinst type="unit maps to" subject="EACH" object="EA"/>
+  <relinst type="unit maps to" subject="PC" object="PCS"/>
+  <relinst type="unit maps to" subject="PCS" object="PCS"/>
+  <relinst type="unit maps to" subject="PIECE" object="PCS"/>
+  <relinst type="unit maps to" subject="KG" object="KG"/>
+  <relinst type="unit maps to" subject="KILO" object="KG"/>
+  <relinst type="unit maps to" subject="KILOGRAM" object="KG"/>
+
+  <!-- Policy parameters and requirement rows. A requirement can       -->
+  <!-- target a group or the ALL sentinel.                             -->
+  <concinst name="Standard Policy" type="Examination Policy"/>
+  <relinst type="tolerance percent" subject="Standard Policy" object="5"/>
+  <relinst type="payment window days" subject="Standard Policy" object="30"/>
+  <relinst type="delivery deadline days" subject="Standard Policy" object="21"/>
+  <relinst type="requires document group" subject="Standard Policy" object="Commercial Documents"/>
+  <relinst type="requires document group" subject="Standard Policy" object="Logistics Documents"/>
+
+  <!-- Required literal content per field type (drives the generic     -->
+  <!-- per-type conflict and missing families).                        -->
+  <concinst name="NET30" type="Text Value"/>
+  <relinst type="required text for" subject="payment-terms-code" object="NET30"/>
+
+  <!-- Canonical currency codes asserted by the normaliser rules.      -->
+  <concinst name="USD" type="Text Value"/>
+  <concinst name="AUD" type="Text Value"/>
+
+  <!-- Title vocabulary as data: pre-joined alternation strings. The   -->
+  <!-- delivery-note entry is variant-tolerant for OCR and free-text   -->
+  <!-- drift: [\s-]+ tolerates spacing and hyphen variation, s?        -->
+  <!-- tolerates optional plurals, and \w* matches word stems (RECEIPT -->
+  <!-- and RECEIPTED both hit RECEIPT\w*).                             -->
+  <concinst name="INVOICE|TAX INVOICE|BILL" type="Vocabulary Pattern"/>
+  <concinst name="DELIVERY[\s-]+NOTE|GOODS[\s-]+RECEIPT\w*|PACKING[\s-]+(LIST|SLIP)S?" type="Vocabulary Pattern"/>
+  <relinst type="title keywords" subject="Invoice" object="INVOICE|TAX INVOICE|BILL"/>
+  <relinst type="title keywords" subject="Delivery Note" object="DELIVERY[\s-]+NOTE|GOODS[\s-]+RECEIPT\w*|PACKING[\s-]+(LIST|SLIP)S?"/>
+
+  <!-- ====================== taxonomy rules ========================== -->
+  <!-- Reflexive self-membership: every document type in play belongs  -->
+  <!-- to its own group, so downstream rules can query membership      -->
+  <!-- uniformly whether a requirement names a group or a leaf.        -->
+  <relinst type="belongs to document group" cf="100" name="TAX.1 Every presented type is a member of its own group">
+    <condition rel="presented in" subject="%DOC" object="%CASE"/>
+    <condition rel="document type" subject="%DOC" object="%S"/>
+    <condition expression="%S" value="%O"/>
+  </relinst>
+
+  <!-- Sentinel universal group: any type actually presented in a case -->
+  <!-- is a member of ALL, so a requirement row targeting ALL applies  -->
+  <!-- to every document.                                              -->
+  <relinst type="belongs to document group" object="ALL" cf="100" name="TAX.2 Every presented type belongs to the ALL sentinel group">
+    <condition rel="presented in" subject="%DOC" object="%CASE"/>
+    <condition rel="document type" subject="%DOC" object="%S"/>
+  </relinst>
+
+  <!-- Denormalized type index: project each presented document's      -->
+  <!-- groups onto the case so absence tests become one count.         -->
+  <relinst type="case has document group" cf="100" name="TAX.3 Project presented document groups onto the case">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="document type" subject="%DOC" object="%T"/>
+    <condition rel="belongs to document group" subject="%T" object="%O"/>
+  </relinst>
+
+  <!-- =================== module 1, structure ======================== -->
+  <!-- 1.1 required document groups. The absence test runs against the -->
+  <!-- projected index because count functions cannot traverse two     -->
+  <!-- hops.                                                           -->
+  <relinst type="structure violations" cf="100" name="AC 1.1A A required document group is not represented">
+    <condition rel="requires document group" subject="Standard Policy" object="%GROUP"/>
+    <condition expression="countRelationshipInstances(%S,'case has document group',%GROUP) is equal to 0" alt="No presented document belongs to the required group {{%GROUP}}"/>
+    <condition expression="'AC1.1A-' + %GROUP + ';case;ExaminationBook;A required document group is not represented;required group;' + %GROUP + ';presented;;Discrepant'" value="%O"/>
+  </relinst>
+
+  <relinst type="1.1 required documents check" cf="100" name="AC 1.1 Copy required-document violations">
+    <condition rel="structure violations" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="1.1 required documents check" cf="100" name="AC 1.1 Clean">
+    <condition expression="countRelationshipInstances(%S,'structure violations',*) is equal to 0" alt="Every required document group is represented"/>
+    <condition expression="'AC1.1_CLEAN;case;ExaminationBook;All required document groups are represented;;;;;Clean'" value="%O"/>
+  </relinst>
+
+  <!-- 1.2 duplicate documents. Synthetic composite-key dedup:         -->
+  <!-- step 1 composes type-plus-number keys, which collapse because   -->
+  <!-- inferred string facts dedupe on subject and object; step 1b is  -->
+  <!-- a keyless fallback at LOWER cf using the document instance      -->
+  <!-- name; step 2 rejoins keys to member documents by rebuilding the -->
+  <!-- candidate key; step 3 picks the canonical first document by     -->
+  <!-- minimum ordinal and marks the rest as copies.                   -->
+  <relinst type="has document number" cf="100" name="AC 1.2 Pre-step Project the document number onto the document">
+    <condition rel="contains fields" subject="%S" object="%NUM_FIELD"/>
+    <condition rel="is field type" subject="%NUM_FIELD" object="document-number"/>
+    <condition rel="text value" subject="%NUM_FIELD" object="%O"/>
+  </relinst>
+
+  <relinst type="unique document key" cf="100" name="AC 1.2A Compose document key from type and document number">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="document type" subject="%DOC" object="%TYPE"/>
+    <condition rel="has document number" subject="%DOC" object="%NUMBER"/>
+    <condition expression="regexCount(%NUMBER,'/\w/') is greater than 0" alt="The document number is not blank"/>
+    <condition expression="%TYPE + '-' + %NUMBER" value="%O"/>
+  </relinst>
+  <relinst type="unique document key" cf="80" name="AC 1.2B Keyless fallback treats the document instance as its own key">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="document type" subject="%DOC" object="%TYPE"/>
+    <condition expression="countRelationshipInstances(%DOC,'has document number',*) is equal to 0" alt="The document states no document number, so its own identity stands in as the key"/>
+    <condition expression="%TYPE + '-' + %DOC" value="%O"/>
+  </relinst>
+  <relinst type="unique document key" cf="80" name="AC 1.2B Keyless fallback treats the document instance as its own key">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="document type" subject="%DOC" object="%TYPE"/>
+    <condition rel="has document number" subject="%DOC" object="%NUMBER"/>
+    <condition expression="regexCount(%NUMBER,'/\w/') is equal to 0" alt="The stated document number is blank, so the document identity stands in as the key"/>
+    <condition expression="%TYPE + '-' + %DOC" value="%O"/>
+  </relinst>
+
+  <relinst type="key matches document" cf="100" name="AC 1.2C Rejoin each key to its member documents">
+    <condition rel="unique document key" subject="%CASE" object="%S"/>
+    <condition rel="presented in" subject="%O" object="%CASE"/>
+    <condition rel="document type" subject="%O" object="%TYPE"/>
+    <condition rel="has document number" subject="%O" object="%NUMBER"/>
+    <condition expression="%TYPE + '-' + %NUMBER" value="%CANDIDATE"/>
+    <condition expression="%S is equal to %CANDIDATE" alt="The rebuilt key equals this stored key"/>
+  </relinst>
+  <relinst type="key matches document" cf="100" name="AC 1.2C Rejoin each key to its member documents">
+    <condition rel="unique document key" subject="%CASE" object="%S"/>
+    <condition rel="presented in" subject="%O" object="%CASE"/>
+    <condition rel="document type" subject="%O" object="%TYPE"/>
+    <condition expression="countRelationshipInstances(%O,'has document number',*) is equal to 0" alt="The document states no document number, so its identity key applies"/>
+    <condition expression="%TYPE + '-' + %O" value="%CANDIDATE"/>
+    <condition expression="%S is equal to %CANDIDATE" alt="The rebuilt identity key equals this stored key"/>
+  </relinst>
+  <relinst type="key matches document" cf="100" name="AC 1.2C Rejoin each key to its member documents">
+    <condition rel="unique document key" subject="%CASE" object="%S"/>
+    <condition rel="presented in" subject="%O" object="%CASE"/>
+    <condition rel="document type" subject="%O" object="%TYPE"/>
+    <condition rel="has document number" subject="%O" object="%NUMBER"/>
+    <condition expression="regexCount(%NUMBER,'/\w/') is equal to 0" alt="The stated document number is blank, so the identity key applies"/>
+    <condition expression="%TYPE + '-' + %O" value="%CANDIDATE"/>
+    <condition expression="%S is equal to %CANDIDATE" alt="The rebuilt identity key equals this stored key"/>
+  </relinst>
+
+  <relinst type="key ordinals" cf="100" name="AC 1.2D Collect ordinals of each key's member documents">
+    <condition rel="key matches document" subject="%S" object="%DOC"/>
+    <condition rel="has ordinal" subject="%DOC" object="%O"/>
+  </relinst>
+
+  <relinst type="first document for key" cf="100" name="AC 1.2E Canonical member is the lowest ordinal">
+    <condition rel="key matches document" subject="%S" object="%O"/>
+    <condition rel="has ordinal" subject="%O" object="%N"/>
+    <condition expression="countRelationshipInstances(%S,'key ordinals',*) is greater than or equal to 1" alt="At least one member ordinal is known"/>
+    <condition expression="minObjects(%S,'key ordinals',*)" value="%MIN" alt="The lowest ordinal among members of this key is {{%MIN}}"/>
+    <condition expression="%N is equal to %MIN" alt="This member carries the lowest ordinal"/>
+  </relinst>
+
+  <relinst type="is a copy of" cf="100" name="AC 1.2F Non-canonical members are copies of the first">
+    <condition rel="key matches document" subject="%KEY" object="%S"/>
+    <condition rel="first document for key" subject="%KEY" object="%O"/>
+    <condition expression="%S is not equal to %O" alt="This member is not the canonical first document"/>
+  </relinst>
+
+  <relinst type="duplicate violations" cf="100" name="AC 1.2G Report each duplicate document">
+    <condition rel="presented in" subject="%DUP" object="%S"/>
+    <condition rel="is a copy of" subject="%DUP" object="%FIRST"/>
+    <condition expression="'AC1.2G-' + %DUP + ';' + %DUP + ';ExaminationBook;Document duplicates an earlier presentation;original;' + %FIRST + ';duplicate;' + %DUP + ';Discrepant'" value="%O"/>
+  </relinst>
+
+  <relinst type="1.2 duplicate documents check" cf="100" name="AC 1.2 Copy duplicate violations">
+    <condition rel="duplicate violations" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="1.2 duplicate documents check" cf="100" name="AC 1.2 Clean">
+    <condition expression="countRelationshipInstances(%S,'duplicate violations',*) is equal to 0" alt="No duplicate documents were found"/>
+    <condition expression="'AC1.2_CLEAN;case;ExaminationBook;No duplicate documents presented;;;;;Clean'" value="%O"/>
+  </relinst>
+
+  <!-- ==================== module 2, amounts ========================= -->
+  <!-- 2.1 line arithmetic: quantity times unit price must equal the   -->
+  <!-- line total. Table-row correlation join: three fields share one  -->
+  <!-- row entity; the row key makes each bad row a distinct finding.  -->
+  <!-- The epsilon test uses abs of the difference, computed stepwise. -->
+  <relinst type="line arithmetic violations" cf="100" name="AC 2.1A Line total does not equal quantity times unit price">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="contains fields" subject="%DOC" object="%QF"/>
+    <condition rel="is field type" subject="%QF" object="quantity"/>
+    <condition rel="table row" subject="%QF" object="%ROW"/>
+    <condition rel="number value" subject="%QF" object="%QTY"/>
+    <condition rel="contains fields" subject="%DOC" object="%PF"/>
+    <condition rel="is field type" subject="%PF" object="unit-price"/>
+    <condition rel="table row" subject="%PF" object="%ROW"/>
+    <condition rel="number value" subject="%PF" object="%PRICE"/>
+    <condition rel="contains fields" subject="%DOC" object="%TF"/>
+    <condition rel="is field type" subject="%TF" object="line-total"/>
+    <condition rel="table row" subject="%TF" object="%ROW"/>
+    <condition rel="number value" subject="%TF" object="%TOTAL"/>
+    <condition expression="%QTY * %PRICE" value="%RAW" alt="Quantity {{%QTY}} times unit price {{%PRICE}} gives {{%RAW}}"/>
+    <condition expression="round(%RAW,2)" value="%CALC" alt="Rounded to two decimal places the computed line total is {{%CALC}}"/>
+    <condition expression="%CALC - %TOTAL" value="%DIFF" alt="Computed minus stated leaves a difference of {{%DIFF}}"/>
+    <condition expression="abs(%DIFF)" value="%GAP" alt="The absolute difference is {{%GAP}}"/>
+    <condition expression="%GAP is greater than 0.005" alt="The difference exceeds the rounding epsilon"/>
+    <condition expression="'AC2.1A-' + %DOC + '-' + %ROW + ';' + %DOC + ';ExaminationBook;A line total does not equal quantity times unit price;stated;' + %TOTAL + ';computed;' + %CALC + ';Discrepant'" value="%O"/>
+  </relinst>
+
+  <!-- Whole-number screening via the round round-trip identity:        -->
+  <!-- quantities of discrete units must be integers.                  -->
+  <relinst type="line arithmetic violations" cf="100" name="AC 2.1B Discrete-unit quantity is not a whole number">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="contains fields" subject="%DOC" object="%QF"/>
+    <condition rel="is field type" subject="%QF" object="quantity"/>
+    <condition rel="table row" subject="%QF" object="%ROW"/>
+    <condition rel="number value" subject="%QF" object="%QTY"/>
+    <condition rel="has paired quantity" subject="%QF" object="%UNIT"/>
+    <condition expression="(%UNIT is equal to 'EA') or (%UNIT is equal to 'PCS')" alt="The unit {{%UNIT}} counts discrete items"/>
+    <condition expression="round(%QTY,0) is not equal to %QTY" alt="Quantity {{%QTY}} is not a whole number"/>
+    <condition expression="'AC2.1B-' + %DOC + '-' + %ROW + ';' + %DOC + ';ExaminationBook;A discrete-unit quantity is fractional;unit;' + %UNIT + ';quantity;' + %QTY + ';Discrepant'" value="%O"/>
+  </relinst>
+
+  <relinst type="2.1 line arithmetic check" cf="100" name="AC 2.1 Copy line arithmetic violations">
+    <condition rel="line arithmetic violations" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="2.1 line arithmetic check" cf="100" name="AC 2.1 Clean">
+    <condition expression="countRelationshipInstances(%S,'line arithmetic violations',*) is equal to 0" alt="Every line total equals quantity times unit price"/>
+    <condition expression="'AC2.1_CLEAN;case;ExaminationBook;Line arithmetic is consistent;;;;;Clean'" value="%O"/>
+  </relinst>
+
+  <!-- 2.2 totals tolerance: the invoice total may differ from the     -->
+  <!-- purchase order total by at most the policy tolerance percent,   -->
+  <!-- in either direction. The band is computed stepwise and every    -->
+  <!-- multi-operator expression is ordered for left-to-right          -->
+  <!-- evaluation because RBLang has no operator precedence.           -->
+  <relinst type="has document total" cf="100" name="AC 2.2A Read the scalar total amount of a document">
+    <condition rel="contains fields" subject="%S" object="%F"/>
+    <condition rel="is field type" subject="%F" object="amount-total"/>
+    <condition expression="countRelationshipInstances(%F,'table row',*) is equal to 0" alt="The total is a scalar field, not a line item"/>
+    <condition rel="number value" subject="%F" object="%O"/>
+  </relinst>
+
+  <relinst type="totals violations" cf="100" name="AC 2.2B Invoice total is outside the tolerance band around the order total">
+    <condition rel="presented in" subject="%INV" object="%S"/>
+    <condition rel="document type" subject="%INV" object="Invoice"/>
+    <condition rel="has document total" subject="%INV" object="%IT"/>
+    <condition rel="presented in" subject="%PO" object="%S"/>
+    <condition rel="document type" subject="%PO" object="Purchase Order"/>
+    <condition rel="has document total" subject="%PO" object="%PT"/>
+    <condition rel="tolerance percent" subject="Standard Policy" object="%TOL"/>
+    <condition expression="%PT * %TOL / 100" value="%MARGIN" alt="The order total {{%PT}} times {{%TOL}} percent gives a margin of {{%MARGIN}}"/>
+    <condition expression="%PT - %MARGIN" value="%LOW" alt="The lower bound of the tolerance band is {{%LOW}}"/>
+    <condition expression="%PT + %MARGIN" value="%HIGH" alt="The upper bound of the tolerance band is {{%HIGH}}"/>
+    <condition expression="isWithinRange(%IT,%LOW,%HIGH) is equal to false" alt="The invoice total {{%IT}} falls outside the band {{%LOW}} to {{%HIGH}}"/>
+    <condition expression="'AC2.2B-' + %INV + ';' + %INV + ';ExaminationBook;Invoice total is outside the order tolerance band;order total;' + %PT + ';invoice total;' + %IT + ';Discrepant'" value="%O"/>
+  </relinst>
+
+  <relinst type="2.2 totals tolerance check" cf="100" name="AC 2.2 Copy totals violations">
+    <condition rel="totals violations" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="2.2 totals tolerance check" cf="100" name="AC 2.2 Clean">
+    <condition expression="countRelationshipInstances(%S,'totals violations',*) is equal to 0" alt="The invoice total sits inside the order tolerance band"/>
+    <condition expression="'AC2.2_CLEAN;case;ExaminationBook;Totals agree within tolerance;;;;;Clean'" value="%O"/>
+  </relinst>
+
+  <!-- 2.3 line reconciliation. Pairwise cross-document comparison     -->
+  <!-- joined on the shared line item code; ordinal comparison breaks  -->
+  <!-- the symmetry so each unordered pair fires once and self-pairs   -->
+  <!-- are impossible. The anti-join tests the reconciliation link in  -->
+  <!-- BOTH directions because it may be recorded either way.          -->
+  <relinst type="reconciliation violations" cf="100" name="AC 2.3A Same item code carries different unlinked line totals across documents">
+    <condition rel="presented in" subject="%D1" object="%S"/>
+    <condition rel="presented in" subject="%D2" object="%S"/>
+    <condition rel="has ordinal" subject="%D1" object="%N1"/>
+    <condition rel="has ordinal" subject="%D2" object="%N2"/>
+    <condition expression="%N1 is greater than %N2" alt="Each unordered pair of documents is compared exactly once"/>
+    <condition rel="contains fields" subject="%D1" object="%C1"/>
+    <condition rel="is field type" subject="%C1" object="line-item-code"/>
+    <condition rel="text value" subject="%C1" object="%CODE"/>
+    <condition rel="contains fields" subject="%D2" object="%C2"/>
+    <condition rel="is field type" subject="%C2" object="line-item-code"/>
+    <condition rel="text value" subject="%C2" object="%CODE"/>
+    <condition rel="table row" subject="%C1" object="%R1"/>
+    <condition rel="table row" subject="%C2" object="%R2"/>
+    <condition rel="contains fields" subject="%D1" object="%T1"/>
+    <condition rel="is field type" subject="%T1" object="line-total"/>
+    <condition rel="table row" subject="%T1" object="%R1"/>
+    <condition rel="number value" subject="%T1" object="%V1"/>
+    <condition rel="contains fields" subject="%D2" object="%T2"/>
+    <condition rel="is field type" subject="%T2" object="line-total"/>
+    <condition rel="table row" subject="%T2" object="%R2"/>
+    <condition rel="number value" subject="%T2" object="%V2"/>
+    <condition expression="%V1 is not equal to %V2" alt="The two documents state different line totals for item {{%CODE}}"/>
+    <condition expression="(countRelationshipInstances(%T1,'is linked to',%T2) is equal to 0) and (countRelationshipInstances(%T2,'is linked to',%T1) is equal to 0)" alt="The two lines were never reconciled as equivalent in either direction"/>
+    <condition expression="'AC2.3A-' + %D1 + '-' + %CODE + ';' + %D1 + ';ExaminationBook;Line totals for the same item code differ and are not reconciled;item;' + %CODE + ';totals;' + %V1 + ' vs ' + %V2 + ';Discrepant'" value="%O"/>
+  </relinst>
+
+  <relinst type="2.3 line reconciliation check" cf="100" name="AC 2.3 Copy reconciliation violations">
+    <condition rel="reconciliation violations" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="2.3 line reconciliation check" cf="100" name="AC 2.3 Clean">
+    <condition expression="countRelationshipInstances(%S,'reconciliation violations',*) is equal to 0" alt="All shared line items agree or are reconciled"/>
+    <condition expression="'AC2.3_CLEAN;case;ExaminationBook;Line items agree across documents;;;;;Clean'" value="%O"/>
+  </relinst>
+
+  <!-- ==================== module 3, parties ========================= -->
+  <!-- Vendor name extraction, then a four-way bidirectional           -->
+  <!-- containment test: exact containment both ways with includes,    -->
+  <!-- then case-insensitive containment both ways through dynamically -->
+  <!-- built regex patterns. Only when all four fail is the pair a     -->
+  <!-- conflict. Non-blank guards keep blank extractions from          -->
+  <!-- producing false agreement.                                      -->
+  <relinst type="vendor name on" cf="100" name="AC 3.1A Read the vendor name from a document">
+    <condition rel="contains fields" subject="%S" object="%F"/>
+    <condition rel="is field type" subject="%F" object="vendor-name"/>
+    <condition rel="text value" subject="%F" object="%O"/>
+  </relinst>
+
+  <relinst type="names in conflict" cf="100" name="AC 3.1B Vendor names differ in both directions at both case sensitivities">
+    <condition rel="presented in" subject="%S" object="%CASE"/>
+    <condition rel="presented in" subject="%O" object="%CASE"/>
+    <condition rel="has ordinal" subject="%S" object="%N1"/>
+    <condition rel="has ordinal" subject="%O" object="%N2"/>
+    <condition expression="%N1 is greater than %N2" alt="Each unordered pair of documents is compared exactly once"/>
+    <condition rel="vendor name on" subject="%S" object="%A"/>
+    <condition rel="vendor name on" subject="%O" object="%B"/>
+    <condition expression="regexCount(%A,'/\w/') is greater than 0" alt="The first vendor name is not blank"/>
+    <condition expression="regexCount(%B,'/\w/') is greater than 0" alt="The second vendor name is not blank"/>
+    <condition expression="includes(%A,%B) is equal to false" alt="The second name does not appear inside the first"/>
+    <condition expression="includes(%B,%A) is equal to false" alt="The first name does not appear inside the second"/>
+    <condition expression="'/' + %A + '/i'" value="%A_CI"/>
+    <condition expression="'/' + %B + '/i'" value="%B_CI"/>
+    <condition expression="regexCount(%B,%A_CI) is equal to 0" alt="Ignoring case, the first name still does not appear inside the second"/>
+    <condition expression="regexCount(%A,%B_CI) is equal to 0" alt="Ignoring case, the second name still does not appear inside the first"/>
+  </relinst>
+
+  <relinst type="party violations" cf="100" name="AC 3.1C Report conflicting vendor names">
+    <condition rel="presented in" subject="%D1" object="%S"/>
+    <condition rel="names in conflict" subject="%D1" object="%D2"/>
+    <condition rel="vendor name on" subject="%D1" object="%A"/>
+    <condition rel="vendor name on" subject="%D2" object="%B"/>
+    <condition expression="'AC3.1C-' + %D1 + '-' + %D2 + ';' + %D1 + ';ExaminationBook;Vendor names conflict across documents;name;' + %A + ';name;' + %B + ';Discrepant'" value="%O"/>
+  </relinst>
+
+  <relinst type="3.1 vendor consistency check" cf="100" name="AC 3.1 Copy party violations">
+    <condition rel="party violations" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="3.1 vendor consistency check" cf="100" name="AC 3.1 Clean">
+    <condition expression="countRelationshipInstances(%S,'party violations',*) is equal to 0" alt="Vendor names are consistent across the presentation"/>
+    <condition expression="'AC3.1_CLEAN;case;ExaminationBook;Vendor names are consistent;;;;;Clean'" value="%O"/>
+  </relinst>
+
+  <!-- ===================== module 4, dates ========================== -->
+  <!-- 4.1 payment due date: derived with a variable offset from       -->
+  <!-- policy, then rolled forward to a working day by two mutually    -->
+  <!-- exclusive branches partitioned on dayOfWeek. The weekend branch -->
+  <!-- decomposes its arithmetic into steps because function calls     -->
+  <!-- must not take expression arguments.                             -->
+  <relinst type="has base due date" cf="100" name="AC 4.1A Base due date is the invoice date plus the policy window">
+    <condition rel="document type" subject="%S" object="Invoice"/>
+    <condition rel="contains fields" subject="%S" object="%F"/>
+    <condition rel="is field type" subject="%F" object="invoice-date"/>
+    <condition rel="date value" subject="%F" object="%D"/>
+    <condition rel="payment window days" subject="Standard Policy" object="%W"/>
+    <condition expression="addDays(%D,%W)" value="%O" alt="The invoice date plus the {{%W}} day payment window gives the base due date"/>
+  </relinst>
+
+  <relinst type="has adjusted due date" cf="100" name="AC 4.1B Due date already falls on a working day">
+    <condition rel="has base due date" subject="%S" object="%DATE"/>
+    <condition expression="dayOfWeek(%DATE) is less than or equal to 5" alt="The base due date falls on a weekday"/>
+    <condition expression="%DATE" value="%O"/>
+  </relinst>
+  <relinst type="has adjusted due date" cf="100" name="AC 4.1C Weekend due date rolls forward to Monday" alt="Moved the due date to Monday because it falls on a weekend">
+    <condition rel="has base due date" subject="%S" object="%DATE"/>
+    <condition expression="dayOfWeek(%DATE) is greater than 5" alt="The base due date falls on a weekend"/>
+    <condition expression="dayOfWeek(%DATE)" value="%DOW" alt="The base due date falls on day {{%DOW}} of the week"/>
+    <condition expression="8 - %DOW" value="%ROLL" alt="Rolling forward {{%ROLL}} days reaches Monday"/>
+    <condition expression="addDays(%DATE,%ROLL)" value="%O" alt="The adjusted due date is the following Monday"/>
+  </relinst>
+
+  <!-- Complementary boolean pair on isAfterDate so both outcomes are  -->
+  <!-- explicit facts, never an absence.                               -->
+  <relinst type="is paid late" object="true" cf="100" name="AC 4.1D Payment made after the adjusted due date">
+    <condition rel="payment date" subject="%S" object="%PAID"/>
+    <condition rel="has adjusted due date" subject="%S" object="%DUE"/>
+    <condition expression="isAfterDate(%PAID,%DUE) is equal to true" alt="The payment date falls after the adjusted due date"/>
+  </relinst>
+  <relinst type="is paid late" object="false" cf="100" name="AC 4.1E Payment made on or before the adjusted due date">
+    <condition rel="payment date" subject="%S" object="%PAID"/>
+    <condition rel="has adjusted due date" subject="%S" object="%DUE"/>
+    <condition expression="isAfterDate(%PAID,%DUE) is equal to false" alt="The payment date does not fall after the adjusted due date"/>
+  </relinst>
+
+  <relinst type="date violations" cf="100" name="AC 4.1F Report late payment">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="is paid late" subject="%DOC" object="%LATE"/>
+    <condition expression="%LATE is equal to true" alt="The document was paid late"/>
+    <condition rel="payment date" subject="%DOC" object="%PAID"/>
+    <condition rel="has adjusted due date" subject="%DOC" object="%DUE"/>
+    <condition expression="'AC4.1F-' + %DOC + ';' + %DOC + ';ExaminationBook;Payment was made after the adjusted due date;due;' + %DUE + ';paid;' + %PAID + ';Discrepant'" value="%O"/>
+  </relinst>
+
+  <!-- 4.2 delivery window: flag-branched deadline rules. When the     -->
+  <!-- case has multiple deliveries the clock starts at the EARLIEST   -->
+  <!-- event date selected inline with minObjects (guarded by a count  -->
+  <!-- so an empty set cannot yield a null best case); otherwise a     -->
+  <!-- single derived final delivery date starts the clock. Both       -->
+  <!-- branches share an identical addDays and comparison tail.       -->
+  <relinst type="date violations" cf="100" name="AC 4.2A Multiple deliveries and the earliest exceeds the delivery window">
+    <condition rel="has multiple deliveries" subject="%S" object="%MULTI"/>
+    <condition expression="%MULTI is equal to true" alt="The case records multiple deliveries"/>
+    <condition expression="countRelationshipInstances(%S,'delivery event dates',*) is greater than or equal to 1" alt="At least one delivery event date is recorded"/>
+    <condition expression="minObjects(%S,'delivery event dates',*)" value="%BASE" alt="The earliest delivery event starts the clock"/>
+    <condition rel="delivery deadline days" subject="Standard Policy" object="%N"/>
+    <condition expression="addDays(%BASE,%N)" value="%DEADLINE" alt="The earliest delivery plus {{%N}} days gives the deadline"/>
+    <condition rel="final delivery date" subject="%S" object="%ACTUAL"/>
+    <condition expression="isAfterDate(%ACTUAL,%DEADLINE) is equal to true" alt="The final delivery falls after the deadline"/>
+    <condition expression="'AC4.2A;case;ExaminationBook;Delivery completed outside the allowed window;deadline;' + %DEADLINE + ';delivered;' + %ACTUAL + ';Discrepant'" value="%O"/>
+  </relinst>
+  <relinst type="date violations" cf="100" name="AC 4.2B Single delivery exceeds the delivery window">
+    <condition rel="has multiple deliveries" subject="%S" object="%MULTI"/>
+    <condition expression="%MULTI is equal to false" alt="The case records a single delivery"/>
+    <condition rel="presented in" subject="%INV" object="%S"/>
+    <condition rel="document type" subject="%INV" object="Invoice"/>
+    <condition rel="contains fields" subject="%INV" object="%IDF"/>
+    <condition rel="is field type" subject="%IDF" object="invoice-date"/>
+    <condition rel="date value" subject="%IDF" object="%BASE"/>
+    <condition rel="delivery deadline days" subject="Standard Policy" object="%N"/>
+    <condition expression="addDays(%BASE,%N)" value="%DEADLINE" alt="The invoice date plus {{%N}} days gives the delivery deadline"/>
+    <condition rel="final delivery date" subject="%S" object="%ACTUAL"/>
+    <condition expression="%ACTUAL is greater than %DEADLINE" alt="The delivery falls after the deadline"/>
+    <condition expression="'AC4.2B;case;ExaminationBook;Delivery fell outside the single-delivery window;deadline;' + %DEADLINE + ';delivered;' + %ACTUAL + ';Discrepant'" value="%O"/>
+  </relinst>
+  <!-- Note the plain numeric comparison above: dates are timestamps      -->
+  <!-- underneath, so greater-than works between two date variables and   -->
+  <!-- is shown here alongside the isAfterDate form used in AC 4.2A.      -->
+
+  <!-- Case-split staging rels unified by an umbrella rel: each        -->
+  <!-- optional data shape gets its own staging rel whose rules only   -->
+  <!-- bind when that shape's facts exist.                             -->
+  <relinst type="delivery summary with schedule" cf="100" name="AC 4.3A Summarise deliveries when event dates exist">
+    <condition expression="countRelationshipInstances(%S,'delivery event dates',*) is greater than or equal to 1" alt="Delivery event dates are recorded"/>
+    <condition expression="countRelationshipInstances(%S,'delivery event dates',*)" value="%N" alt="{{%N}} delivery events are recorded"/>
+    <condition expression="'AC4.3A;case;ExaminationBook;Delivery schedule summary;events recorded;' + %N + ';;;Information'" value="%O"/>
+  </relinst>
+  <relinst type="delivery summary no schedule" cf="100" name="AC 4.3B Summarise deliveries when no event dates exist">
+    <condition expression="countRelationshipInstances(%S,'delivery event dates',*) is equal to 0" alt="No delivery event dates are recorded"/>
+    <condition rel="final delivery date" subject="%S" object="%D"/>
+    <condition expression="'AC4.3B;case;ExaminationBook;Single recorded delivery;delivered;' + %D + ';;;Information'" value="%O"/>
+  </relinst>
+  <relinst type="delivery summary" cf="100" name="AC 4.3C Unify the scheduled shape">
+    <condition rel="delivery summary with schedule" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="delivery summary" cf="100" name="AC 4.3D Unify the unscheduled shape">
+    <condition rel="delivery summary no schedule" subject="%S" object="%O"/>
+  </relinst>
+
+  <relinst type="4.1 payment due check" cf="100" name="AC 4.1 Copy date violations">
+    <condition rel="date violations" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="4.1 payment due check" cf="100" name="AC 4.1 Clean">
+    <condition expression="countRelationshipInstances(%S,'date violations',*) is equal to 0" alt="No date requirement was breached"/>
+    <condition expression="'AC4.1_CLEAN;case;ExaminationBook;All date requirements met;;;;;Clean'" value="%O"/>
+  </relinst>
+  <relinst type="4.2 delivery window check" cf="100" name="AC 4.2 Report the delivery summary">
+    <condition rel="delivery summary" subject="%S" object="%O"/>
+  </relinst>
+
+  <!-- ==================== module 5, content ========================= -->
+  <!-- 5.1 title vocabulary: the alternation lives in DATA; the rule   -->
+  <!-- builds a word-boundary regex from it at inference time.         -->
+  <relinst type="content violations" cf="100" name="AC 5.1A Document title does not match the vocabulary for its type">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="document type" subject="%DOC" object="%TYPE"/>
+    <condition rel="title keywords" subject="%TYPE" object="%VOCAB"/>
+    <condition rel="contains fields" subject="%DOC" object="%TF"/>
+    <condition rel="is field type" subject="%TF" object="document-title"/>
+    <condition rel="text value" subject="%TF" object="%TITLE"/>
+    <condition expression="regexCount(%TITLE,'/\w/') is greater than 0" alt="The document title is not blank"/>
+    <condition expression="'/\b(' + %VOCAB + ')\b/i'" value="%RX"/>
+    <condition expression="regexCount(%TITLE,%RX) is equal to 0" alt="The title contains none of the accepted keywords for this document type"/>
+    <condition expression="'AC5.1A-' + %DOC + ';' + %DOC + ';ExaminationBook;Title does not match the vocabulary for the document type;expected one of;' + %VOCAB + ';title;' + %TITLE + ';Discrepant'" value="%O"/>
+  </relinst>
+
+  <!-- 5.2 emulated negative lookahead: the instruction phrase must    -->
+  <!-- not stand bare; extending the phrase by one character class     -->
+  <!-- detects whether a named party follows it. TWO rules share ONE   -->
+  <!-- name: a duplicate-name rule family is how RBLang expresses      -->
+  <!-- disjunction over phrasing variants, one alternative per rule.   -->
+  <relinst type="content violations" cf="100" name="AC 5.2A Release instruction names no responsible party">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="contains fields" subject="%DOC" object="%F"/>
+    <condition rel="is field type" subject="%F" object="instruction-text"/>
+    <condition rel="text value" subject="%F" object="%TEXT"/>
+    <condition expression="regexCount(%TEXT,'/release to the order of/i') is greater than or equal to 1" alt="The release instruction phrase is present"/>
+    <condition expression="regexCount(%TEXT,'/release to the order of [a-z]/i') is equal to 0" alt="The phrase is not followed by a named party"/>
+    <condition expression="'AC5.2A-' + %DOC + ';' + %DOC + ';ExaminationBook;Release instruction does not name a responsible party;;;;;Discrepant'" value="%O"/>
+  </relinst>
+  <relinst type="content violations" cf="100" name="AC 5.2A Release instruction names no responsible party">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="contains fields" subject="%DOC" object="%F"/>
+    <condition rel="is field type" subject="%F" object="instruction-text"/>
+    <condition rel="text value" subject="%F" object="%TEXT"/>
+    <condition expression="regexCount(%TEXT,'/deliver against instructions from/i') is greater than or equal to 1" alt="The delivery instruction phrase is present"/>
+    <condition expression="regexCount(%TEXT,'/deliver against instructions from [a-z]/i') is equal to 0" alt="The phrase is not followed by a named party"/>
+    <condition expression="'AC5.2A-' + %DOC + ';' + %DOC + ';ExaminationBook;Delivery instruction does not name a responsible party;;;;;Discrepant'" value="%O"/>
+  </relinst>
+
+  <!-- 5.3 approved code whitelist: anchored whole-string alternation  -->
+  <!-- split across two conditions to stay inside the 500 character    -->
+  <!-- regex pattern cap; non-membership requires every part to        -->
+  <!-- return zero.                                                    -->
+  <relinst type="content violations" cf="100" name="AC 5.3A Payment terms code is not in the approved list">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="contains fields" subject="%DOC" object="%F"/>
+    <condition rel="is field type" subject="%F" object="payment-terms-code"/>
+    <condition rel="text value" subject="%F" object="%CODE"/>
+    <condition expression="regexCount(%CODE,'/^(NET7|NET14|NET30|NET45)$/') is equal to 0" alt="Not an approved terms code in the NET family"/>
+    <condition expression="regexCount(%CODE,'/^(EOM|COD|CIA|PIA)$/') is equal to 0" alt="Not an approved terms code in the settlement family"/>
+    <condition expression="'AC5.3A-' + %DOC + ';' + %DOC + ';ExaminationBook;Payment terms code is not approved;code;' + %CODE + ';;;Discrepant'" value="%O"/>
+  </relinst>
+
+  <!-- 5.4 remark classification: complementary includes pair gives    -->
+  <!-- an exhaustive extract-or-default.                               -->
+  <relinst type="has remark class" cf="100" name="AC 5.4A Remark contains an urgency marker">
+    <condition rel="contains fields" subject="%S" object="%F"/>
+    <condition rel="is field type" subject="%F" object="remark-text"/>
+    <condition rel="text value" subject="%F" object="%TEXT"/>
+    <condition expression="includes(%TEXT,'URGENT') is equal to true" alt="The remark carries the urgency marker"/>
+    <condition expression="'Urgent'" value="%O"/>
+  </relinst>
+  <relinst type="has remark class" cf="100" name="AC 5.4B Remark carries no urgency marker">
+    <condition rel="contains fields" subject="%S" object="%F"/>
+    <condition rel="is field type" subject="%F" object="remark-text"/>
+    <condition rel="text value" subject="%F" object="%TEXT"/>
+    <condition expression="includes(%TEXT,'URGENT') is equal to false" alt="The remark carries no urgency marker"/>
+    <condition expression="'Routine'" value="%O"/>
+  </relinst>
+
+  <!-- 5.5 currency normaliser family: one rule per canonical value,   -->
+  <!-- each requiring a word-boundary alternation of the target and    -->
+  <!-- its synonyms AND a zero count of confusable sibling terms, so a -->
+  <!-- shorter term never matches inside a longer sibling.             -->
+  <relinst type="has normalised currency" object="USD" cf="100" name="AC 5.5A Normalise United States dollar wordings">
+    <condition rel="contains fields" subject="%S" object="%F"/>
+    <condition rel="is field type" subject="%F" object="currency-text"/>
+    <condition rel="text value" subject="%F" object="%RAW"/>
+    <condition expression="regexCount(%RAW,'/\bUSD\b|\bUS DOLLARS?\b|\bUNITED STATES DOLLARS?\b/i') is greater than or equal to 1" alt="The wording names the United States dollar"/>
+    <condition expression="regexCount(%RAW,'/\bAUD\b|\bAUSTRALIAN\b|\bCAD\b|\bCANADIAN\b/i') is equal to 0" alt="The wording does not name a confusable dollar currency"/>
+  </relinst>
+  <relinst type="has normalised currency" object="AUD" cf="100" name="AC 5.5B Normalise Australian dollar wordings">
+    <condition rel="contains fields" subject="%S" object="%F"/>
+    <condition rel="is field type" subject="%F" object="currency-text"/>
+    <condition rel="text value" subject="%F" object="%RAW"/>
+    <condition expression="regexCount(%RAW,'/\bAUD\b|\bAUSTRALIAN DOLLARS?\b/i') is greater than or equal to 1" alt="The wording names the Australian dollar"/>
+  </relinst>
+
+  <!-- Cross-document currency agreement over the NORMALISED values,   -->
+  <!-- with ordinal symmetry-breaking so each pair reports once.       -->
+  <relinst type="content violations" cf="100" name="AC 5.5C Documents carry different normalised currencies">
+    <condition rel="presented in" subject="%D1" object="%S"/>
+    <condition rel="presented in" subject="%D2" object="%S"/>
+    <condition rel="has ordinal" subject="%D1" object="%N1"/>
+    <condition rel="has ordinal" subject="%D2" object="%N2"/>
+    <condition expression="%N1 is greater than %N2" alt="Each unordered pair of documents is compared exactly once"/>
+    <condition rel="has normalised currency" subject="%D1" object="%C1"/>
+    <condition rel="has normalised currency" subject="%D2" object="%C2"/>
+    <condition expression="%C1 is not equal to %C2" alt="The two documents settle in different currencies"/>
+    <condition expression="'AC5.5C-' + %D1 + '-' + %D2 + ';' + %D1 + ';ExaminationBook;Documents settle in different currencies;currency;' + %C1 + ';currency;' + %C2 + ';Discrepant'" value="%O"/>
+  </relinst>
+
+  <!-- 5.6 unit normalization through the alias table. The identity    -->
+  <!-- rows make canonical inputs flow through the same generic rule.  -->
+  <relinst type="has normalised unit" cf="100" name="AC 5.6A Normalise a unit through the alias table">
+    <condition rel="is field type" subject="%S" object="quantity-unit"/>
+    <condition rel="text value" subject="%S" object="%RAW"/>
+    <condition rel="unit maps to" subject="%RAW" object="%O"/>
+  </relinst>
+
+  <!-- Computed companion-key join: a quantity field finds its unit    -->
+  <!-- field by building the expected companion category name from its -->
+  <!-- own category, then equating a second binding to it.             -->
+  <relinst type="has paired quantity" cf="100" name="AC 5.6B Pair each quantity with the unit field on the same row">
+    <condition rel="is field type" subject="%S" object="%FT"/>
+    <condition rel="field category" subject="%FT" object="%CAT"/>
+    <condition expression="%CAT is equal to 'quantity'" alt="The field belongs to the quantity category"/>
+    <condition rel="table row" subject="%S" object="%ROW"/>
+    <condition rel="contains fields" subject="%DOC" object="%S"/>
+    <condition rel="contains fields" subject="%DOC" object="%UF"/>
+    <condition rel="table row" subject="%UF" object="%ROW"/>
+    <condition rel="is field type" subject="%UF" object="%UFT"/>
+    <condition rel="field category" subject="%UFT" object="%UCAT"/>
+    <condition expression="%CAT + '-unit'" value="%EXPECTED"/>
+    <condition expression="%UCAT is equal to %EXPECTED" alt="The companion field carries the matching unit category"/>
+    <condition rel="has normalised unit" subject="%UF" object="%O"/>
+  </relinst>
+
+  <!-- Generic per-type conflict and missing families. Rule names      -->
+  <!-- carry a code taxonomy: GEN module, C conflict or M missing, and -->
+  <!-- a type code per value projection. The exclusion registry and    -->
+  <!-- the reified expected-data-type table keep these rules fully     -->
+  <!-- generic; adding a field type never adds a rule.                 -->
+  <relinst type="generic value violations" cf="100" name="GEN.C.TXT Required text content conflicts">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="contains fields" subject="%DOC" object="%F"/>
+    <condition rel="is field type" subject="%F" object="%FT"/>
+    <condition expression="countRelationshipInstances(%FT,'is excluded from generic checks',*) is equal to 0" alt="This field type is not opted out of generic checks"/>
+    <condition rel="required text for" subject="%FT" object="%WANT"/>
+    <condition rel="text value" subject="%F" object="%GOT"/>
+    <condition expression="%GOT is not equal to %WANT" alt="The stated text differs from the required text"/>
+    <condition expression="'GEN.C.TXT-' + %DOC + '-' + %FT + ';' + %DOC + ';ExaminationBook;Required text content conflicts;required;' + %WANT + ';stated;' + %GOT + ';Discrepant'" value="%O"/>
+  </relinst>
+  <relinst type="generic value violations" cf="100" name="GEN.M.TXT Required text not present">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="contains fields" subject="%DOC" object="%F"/>
+    <condition rel="is field type" subject="%F" object="%FT"/>
+    <condition expression="countRelationshipInstances(%FT,'is excluded from generic checks',*) is equal to 0" alt="This field type is not opted out of generic checks"/>
+    <condition rel="required text for" subject="%FT" object="%WANT"/>
+    <condition expression="countRelationshipInstances(%F,'text value',*) is equal to 0" alt="The field carries no text value at all"/>
+    <condition expression="'GEN.M.TXT-' + %DOC + '-' + %FT + ';' + %DOC + ';ExaminationBook;Required text not present;required;' + %WANT + ';stated;;Discrepant'" value="%O"/>
+  </relinst>
+  <!-- Unmapped catch-all routing: a field whose extractor declared no  -->
+  <!-- recognised type is surfaced as an Information record rather      -->
+  <!-- than silently skipped by the typed check families.               -->
+  <relinst type="generic value violations" cf="100" name="GEN.U.ANY Field carries an unmapped data type">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="contains fields" subject="%DOC" object="%F"/>
+    <condition rel="is data type" subject="%F" object="Unmapped"/>
+    <condition rel="is field type" subject="%F" object="%FT"/>
+    <condition expression="'GEN.U.ANY-' + %DOC + '-' + %FT + ';' + %DOC + ';ExaminationBook;Field data type could not be mapped;field type;' + %FT + ';;;Information'" value="%O"/>
+  </relinst>
+
+  <relinst type="generic value violations" cf="100" name="GEN.T.ANY Declared data type conflicts with the registry">
+    <condition rel="presented in" subject="%DOC" object="%S"/>
+    <condition rel="contains fields" subject="%DOC" object="%F"/>
+    <condition rel="is field type" subject="%F" object="%FT"/>
+    <condition expression="countRelationshipInstances(%FT,'is excluded from generic checks',*) is equal to 0" alt="This field type is not opted out of generic checks"/>
+    <condition rel="expected data type" subject="%FT" object="%WANT"/>
+    <condition rel="is data type" subject="%F" object="%GOT"/>
+    <condition expression="%GOT is not equal to %WANT" alt="The declared data type differs from the registry"/>
+    <condition expression="'GEN.T.ANY-' + %DOC + '-' + %FT + ';' + %DOC + ';ExaminationBook;Field data type conflicts with the registry;expected;' + %WANT + ';declared;' + %GOT + ';Discrepant'" value="%O"/>
+  </relinst>
+
+  <relinst type="5.1 content checks" cf="100" name="AC 5 Copy content violations">
+    <condition rel="content violations" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="5.1 content checks" cf="100" name="AC 5 Copy generic value violations">
+    <condition rel="generic value violations" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="5.1 content checks" cf="100" name="AC 5 Clean">
+    <condition expression="countRelationshipInstances(%S,'content violations',*) is equal to 0" alt="No content check raised a finding"/>
+    <condition expression="countRelationshipInstances(%S,'generic value violations',*) is equal to 0" alt="No generic value check raised a finding"/>
+    <condition expression="'AC5_CLEAN;case;ExaminationBook;Content checks passed;;;;;Clean'" value="%O"/>
+  </relinst>
+
+  <!-- ================== run-all umbrella ============================ -->
+  <!-- One trivial copy rule per check rel: a single query runs the    -->
+  <!-- whole suite while each check stays individually queryable.      -->
+  <relinst type="run all checks" cf="100" name="ALL Copy 1.1">
+    <condition rel="1.1 required documents check" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="run all checks" cf="100" name="ALL Copy 1.2">
+    <condition rel="1.2 duplicate documents check" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="run all checks" cf="100" name="ALL Copy 2.1">
+    <condition rel="2.1 line arithmetic check" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="run all checks" cf="100" name="ALL Copy 2.2">
+    <condition rel="2.2 totals tolerance check" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="run all checks" cf="100" name="ALL Copy 2.3">
+    <condition rel="2.3 line reconciliation check" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="run all checks" cf="100" name="ALL Copy 3.1">
+    <condition rel="3.1 vendor consistency check" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="run all checks" cf="100" name="ALL Copy 4.1">
+    <condition rel="4.1 payment due check" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="run all checks" cf="100" name="ALL Copy 4.2">
+    <condition rel="4.2 delivery window check" subject="%S" object="%O"/>
+  </relinst>
+  <relinst type="run all checks" cf="100" name="ALL Copy 5.1">
+    <condition rel="5.1 content checks" subject="%S" object="%O"/>
+  </relinst>
+
+</rbl:kb>
